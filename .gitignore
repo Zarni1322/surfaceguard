@@ -1,0 +1,87 @@
+# ─── Binaries ──────────────────────────────────────────────
+surfaceguard
+surfaceguard-api
+scanner
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# ─── Go ────────────────────────────────────────────────────
+vendor/
+*.test
+*.out
+*.prof
+cover.html
+coverage.txt
+
+# ─── Node.js ───────────────────────────────────────────────
+node_modules/
+ui/surfaceguard-ui/node_modules/
+ui/surfaceguard-ui/dist/
+ui/surfaceguard-ui/build/
+
+# ─── Reports / Exports ────────────────────────────────────
+reports/
+exports/
+!internal/report/*.go
+!cmd/api/main.go
+!go.mod
+!go.sum
+!package.json
+!package-lock.json
+!internal/**/*.json
+!pkg/**/*.json
+
+# ─── Database ──────────────────────────────────────────────
+data/cve.db-journal
+
+# ─── Environment ──────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ─── IDE / Editor ─────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Logs / Temp ──────────────────────────────────────────
+logs/
+*.log
+/tmp/
+temp/
+
+# ─── OS ────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ─── Claude Code ───────────────────────────────────────────
+.claude/
+
+# ─── Misc ─────────────────────────────────────────────────
+*.bak
+*.orig
+*.tmp
+.cache/
+
+# Database (track .gitkeep, ignore actual DB)
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.db-journal
+
+# Build output — keep HTML in source, ignore generated
+!*.html
+ui/surfaceguard-ui/dist/
+*.test

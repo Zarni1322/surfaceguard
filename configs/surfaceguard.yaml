@@ -1,0 +1,100 @@
+# SurfaceGuard Configuration
+# Path: configs/surfaceguard.yaml
+# All values have sensible defaults — this file is optional.
+
+scan:
+  # Ports to scan. If empty, scans top 30 common ports.
+  ports:
+    - 21
+    - 22
+    - 23
+    - 25
+    - 53
+    - 80
+    - 110
+    - 111
+    - 135
+    - 139
+    - 143
+    - 443
+    - 445
+    - 993
+    - 995
+    - 1433
+    - 1521
+    - 2049
+    - 3306
+    - 3389
+    - 5432
+    - 5900
+    - 5985
+    - 5986
+    - 6379
+    - 8080
+    - 8443
+    - 9000
+    - 9090
+    - 27017
+
+  # Number of concurrent scan workers
+  workers: 100
+
+  # Per-port connection timeout
+  timeout: 3s
+
+  # Maximum banner bytes to read
+  banner_size: 2048
+
+  # Enable HTTP fingerprinting on detected HTTP/HTTPS services
+  fingerprint: true
+
+  # Rate limit in packets/second (0 = unlimited)
+  rate_limit: 0
+
+database:
+  # Path to SQLite database file (relative to config file)
+  path: "data/cve.db"
+
+  # Connection pool settings
+  max_open_conns: 1
+  max_idle_conns: 1
+  conn_max_lifetime: "30m"
+
+update:
+  # Enable automatic update checks
+  enabled: true
+
+  # NVD API 2.0 base URLs
+  cve_base_url: "https://services.nvd.nist.gov/rest/json/cves/2.0"
+  cpe_base_url: "https://services.nvd.nist.gov/rest/json/cpes/2.0"
+
+  # CISA KEV feed
+  kev_base_url: "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+
+  # EPSS score feed
+  epss_base_url: "https://epss.cyentia.com/epss_scores-current.csv.gz"
+
+  # HTTP client settings
+  http_timeout: "30s"
+  retry_count: 3
+  retry_delay: "5s"
+
+  # Incremental updates (only download changed records)
+  incremental: true
+
+logging:
+  # Log level: debug, info, warn, error
+  level: "info"
+
+  # Output format: text, json
+  format: "text"
+
+report:
+  # Default output format: console, json, html
+  default_format: "console"
+
+  # Path to custom HTML template (empty = built-in template)
+  html_template: ""
+
+  # Minimum CVSS v3 score to include in report (0.0 = all)
+  cvss_threshold: 0.0
