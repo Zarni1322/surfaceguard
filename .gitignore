@@ -1,7 +1,7 @@
 # ─── Binaries ──────────────────────────────────────────────
 surfaceguard
 surfaceguard-api
-scanner
+/surfaceguard
 *.exe
 *.exe~
 *.dll
