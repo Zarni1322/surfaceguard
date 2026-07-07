@@ -97,7 +97,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 p-3 md:p-4 lg:p-5 xl:p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[#F8FAFC]">Settings</h1>
@@ -124,7 +124,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-3 grid-cols-1 lg:grid-cols-2">
         {/* System Information */}
         <Card className="border-[#1E293B] bg-[#1E293B] lg:col-span-2">
           <CardHeader>
@@ -139,7 +139,7 @@ export default function SettingsPage() {
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#3B82F6] border-t-transparent" />
               </div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
                 <SysInfoCard label="Version" value={sysInfo?.version || "—"} icon={Shield} color="#3B82F6" />
                 <SysInfoCard label="DB Schema" value={`v${sysInfo?.db_version || "—"}`} icon={Database} color="#22C55E" />
                 <SysInfoCard label="Feed Status" value={sysInfo?.feed_status || "Unknown"} icon={Activity} color="#F59E0B" />
@@ -157,7 +157,7 @@ export default function SettingsPage() {
               Scan Configuration
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             <SettingField label="Workers" desc="Concurrent scan threads">
               <Input
                 type="number"
@@ -196,7 +196,7 @@ export default function SettingsPage() {
               Logging
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             <SettingField label="Log Level" desc="Verbosity of logs">
               <select
                 value={logLevel}

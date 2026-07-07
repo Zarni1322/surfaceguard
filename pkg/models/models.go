@@ -273,3 +273,107 @@ type DatabaseInfo struct {
 	EPSSCount     int       `json:"epss_count"`
 	IntegrityOK   bool      `json:"integrity_ok"`
 }
+
+// ============================================================================
+// Authenticated Assessment Types
+// ============================================================================
+
+// Protocol enumerates supported authentication protocols.
+type Protocol string
+
+const (
+	ProtocolSSH   Protocol = "ssh"
+	ProtocolWinRM Protocol = "winrm"
+	ProtocolSNMP  Protocol = "snmp"
+)
+
+// CredentialProfile holds reusable credentials for authenticated scanning.
+// Secrets are always encrypted at rest (AES-GCM) and never logged.
+type CredentialProfile struct {
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Protocol    Protocol  `json:"protocol"`
+	Host        string    `json:"host"`
+	Port        int       `json:"port"`
+	Username    string    `json:"username,omitempty"`
+	AuthMethod  string    `json:"auth_method"` // password, key, key+passphrase, community, snmpv3
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// ValidationResult holds the outcome of a credential validation (test connection).
+type ValidationResult struct {
+	Status      string              `json:"status"` // SUCCESS, WARNING, FAILED
+	Checks      []ValidationCheck   `json:"checks"`
+	TestedAt    time.Time           `json:"tested_at"`
+	ProfileID   int64               `json:"profile_id"`
+	Target      string              `json:"target"`
+}
+
+// ValidationCheck is one check within a credential validation.
+type ValidationCheck struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"` // pass, warn, fail
+	Message string `json:"message,omitempty"`
+}
+
+// AssetInfo holds inventory information about a scanned host.
+type AssetInfo struct {
+	ID            int64     `json:"id"`
+	Hostname      string    `json:"hostname"`
+	IP            string    `json:"ip"`
+	OS            string    `json:"os"`
+	Distro        string    `json:"distro,omitempty"`
+	KernelVersion string    `json:"kernel_version,omitempty"`
+	Architecture  string    `json:"architecture,omitempty"`
+	AssetType     string    `json:"asset_type"` // linux, windows, network_device
+	RiskScore     float64   `json:"risk_score"`
+	LastSeen      time.Time `json:"last_seen"`
+	LastScan      time.Time `json:"last_scan"`
+}
+
+// InstalledPackage represents a package discovered on a Linux host.
+type InstalledPackage struct {
+	Name       string `json:"name"`
+	Version    string `json:"version"`
+	Arch       string `json:"arch,omitempty"`
+	CPE23URI   string `json:"cpe_2_3_uri,omitempty"`
+	Status     string `json:"status"` // installed, removed, changed
+}
+
+// InstalledSoftware represents installed software on a Windows host.
+type InstalledSoftware struct {
+	Name         string `json:"name"`
+	Version      string `json:"version"`
+	Vendor       string `json:"vendor,omitempty"`
+	InstallDate  string `json:"install_date,omitempty"`
+	CPE23URI     string `json:"cpe_2_3_uri,omitempty"`
+}
+
+// SecurityFinding represents a security configuration check result.
+type SecurityFinding struct {
+	CheckID   string `json:"check_id"`
+	Name      string `json:"name"`
+	Severity  string `json:"severity"`
+	Status    string `json:"status"` // pass, warn, fail
+	Evidence  string `json:"evidence,omitempty"`
+}
+
+// AssessmentResult holds the output of an authenticated assessment scan.
+type AssessmentResult struct {
+	ID           int64                `json:"id"`
+	Target       string               `json:"target"`
+	ProfileID    int64                `json:"profile_id"`
+	ProfileName  string               `json:"profile_name,omitempty"`
+	Protocol     Protocol             `json:"protocol"`
+	StartedAt    time.Time            `json:"started_at"`
+	Duration     string               `json:"duration"`
+	Asset        *AssetInfo           `json:"asset,omitempty"`
+	Packages     []InstalledPackage   `json:"packages,omitempty"`
+	Software     []InstalledSoftware  `json:"software,omitempty"`
+	Findings     []SecurityFinding    `json:"findings,omitempty"`
+	CVEs         []CVE                `json:"cves,omitempty"`
+	RiskScore    float64              `json:"risk_score"`
+	Validation   *ValidationResult    `json:"validation,omitempty"`
+	Status       string               `json:"status"`
+}

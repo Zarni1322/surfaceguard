@@ -19,7 +19,7 @@ export default function ScanHistoryPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-3 p-3 md:p-4 lg:p-5 xl:p-6">
         <h1 className="text-2xl font-bold text-[#F8FAFC]">Scan History</h1>
         <Card className="border-[#1E293B] bg-[#1E293B]">
           <CardContent className="py-20">
@@ -34,7 +34,7 @@ export default function ScanHistoryPage() {
 
   if (error) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-3">
         <h1 className="text-2xl font-bold text-[#F8FAFC]">Scan History</h1>
         <Card className="border-[#EF4444]/30 bg-[#1E293B]">
           <CardContent className="pt-6">
@@ -51,7 +51,7 @@ export default function ScanHistoryPage() {
   const records = history || [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[#F8FAFC]">Scan History</h1>

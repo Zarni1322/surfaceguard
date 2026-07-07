@@ -15,6 +15,13 @@ import (
 	"time"
 	"gopkg.in/yaml.v3"
 )
+// AssessmentConfig configures authenticated scanning.
+type AssessmentConfig struct {
+	SSHKeyDir   string `yaml:"ssh_key_dir"`
+	EncryptKey  string `yaml:"encryption_key"`
+	ConnTimeout string `yaml:"conn_timeout"`
+}
+
 // Config holds all scanner configuration loaded from YAML + env overrides.
 type Config struct {
 	// Scan settings
@@ -27,6 +34,8 @@ type Config struct {
 	Logging LoggingConfig `yaml:"logging"`
 	// Report settings
 	Report ReportConfig `yaml:"report"`
+	// Assessment settings
+	Assessment AssessmentConfig `yaml:"assessment"`
 	// Banner settings
 	ShowBanner bool `yaml:"show_banner"`
 	// Config file path (not from YAML, set programmatically)
@@ -119,6 +128,11 @@ func DefaultConfig() *Config {
 			HTMLTemplate:  "",
 			CVSSThreshold: 0.0,
 		},
+			Assessment: AssessmentConfig{
+				SSHKeyDir:   "ssh_keys",
+				EncryptKey:  "",
+				ConnTimeout: "10s",
+			},
 		ShowBanner: true,
 	}
 }

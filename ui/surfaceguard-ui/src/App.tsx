@@ -5,7 +5,10 @@ import MainLayout from "@/layouts/MainLayout";
 import DashboardPage from "@/pages/dashboard/DashboardPage";
 import HostDiscoveryPage from "@/pages/host-discovery/HostDiscoveryPage";
 import CVEDiscoveryPage from "@/pages/cve-discovery/CVEDiscoveryPage";
+import CredentialsPage from "@/pages/credentials/CredentialsPage";
+import AssessmentPage from "@/pages/assessment/AssessmentPage";
 import AssetsPage from "@/pages/assets/AssetsPage";
+import AssessmentHistoryPage from "@/pages/assessment-history/AssessmentHistoryPage";
 import ScanHistoryPage from "@/pages/scan-history/ScanHistoryPage";
 import ReportsPage from "@/pages/reports/ReportsPage";
 import UpdatesPage from "@/pages/updates/UpdatesPage";
@@ -30,7 +33,10 @@ export default function App() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/host-discovery" element={<HostDiscoveryPage />} />
             <Route path="/cve-discovery" element={<CVEDiscoveryPage />} />
+            <Route path="/credentials" element={<CredentialsPage />} />
+            <Route path="/assessment" element={<AssessmentPage />} />
             <Route path="/assets" element={<AssetsPage />} />
+            <Route path="/assessment-history" element={<AssessmentHistoryPage />} />
             <Route path="/scan-history" element={<ScanHistoryPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/updates" element={<UpdatesPage />} />

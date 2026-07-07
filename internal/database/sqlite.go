@@ -36,14 +36,21 @@ var _ Database = (*sqliteDB)(nil)
 type sqliteDB struct {
 	db *sql.DB
 
-	vendorRepo       *sqliteVendorRepo
-	productRepo      *sqliteProductRepo
-	cpeRepo          *sqliteCPERepo
-	cveRepo          *sqliteCVERepo
-	kevRepo          *sqliteKEVRepo
-	epssRepo         *sqliteEPSSRepo
-	metaRepo         *sqliteMetadataRepo
-	checkpointRepo   *sqliteCheckpointRepo
+	vendorRepo             *sqliteVendorRepo
+	productRepo            *sqliteProductRepo
+	cpeRepo                *sqliteCPERepo
+	cveRepo                *sqliteCVERepo
+	kevRepo                *sqliteKEVRepo
+	epssRepo               *sqliteEPSSRepo
+	metaRepo               *sqliteMetadataRepo
+	checkpointRepo         *sqliteCheckpointRepo
+	credProfileRepo        *sqliteCredentialProfileRepo
+	assetRepo              *sqliteAssetInventoryRepo
+	assessResultRepo       *sqliteAssessmentResultRepo
+	pkgRepo                *sqliteInstalledPackageRepo
+	swRepo                 *sqliteInstalledSoftwareRepo
+	secFindingRepo         *sqliteSecurityFindingRepo
+	credValidationRepo     *sqliteCredentialValidationRepo
 
 	mu sync.RWMutex
 }
@@ -83,6 +90,13 @@ func NewSQLiteDatabase(ctx context.Context, path string) (Database, error) {
 	sqlite.epssRepo = &sqliteEPSSRepo{db: db}
 	sqlite.metaRepo = &sqliteMetadataRepo{db: db}
 	sqlite.checkpointRepo = &sqliteCheckpointRepo{db: db}
+	sqlite.credProfileRepo = &sqliteCredentialProfileRepo{db: db}
+	sqlite.assetRepo = &sqliteAssetInventoryRepo{db: db}
+	sqlite.assessResultRepo = &sqliteAssessmentResultRepo{db: db}
+	sqlite.pkgRepo = &sqliteInstalledPackageRepo{db: db}
+	sqlite.swRepo = &sqliteInstalledSoftwareRepo{db: db}
+	sqlite.secFindingRepo = &sqliteSecurityFindingRepo{db: db}
+	sqlite.credValidationRepo = &sqliteCredentialValidationRepo{db: db}
 
 	// Run migrations.
 	if err := sqlite.migrate(ctx); err != nil {
@@ -133,14 +147,21 @@ func (s *sqliteDB) migrate(ctx context.Context) error {
 // Repository accessors
 // ============================================================================
 
-func (s *sqliteDB) Vendor() VendorRepository         { return s.vendorRepo }
-func (s *sqliteDB) Product() ProductRepository       { return s.productRepo }
-func (s *sqliteDB) CPE() CPERepository               { return s.cpeRepo }
-func (s *sqliteDB) CVE() CVERepository               { return s.cveRepo }
-func (s *sqliteDB) KEV() KEVRepository               { return s.kevRepo }
-func (s *sqliteDB) EPSS() EPSSRepository             { return s.epssRepo }
-func (s *sqliteDB) Metadata() MetadataRepository     { return s.metaRepo }
-func (s *sqliteDB) Checkpoint() CheckpointRepository { return s.checkpointRepo }
+func (s *sqliteDB) Vendor() VendorRepository                   { return s.vendorRepo }
+func (s *sqliteDB) Product() ProductRepository                 { return s.productRepo }
+func (s *sqliteDB) CPE() CPERepository                         { return s.cpeRepo }
+func (s *sqliteDB) CVE() CVERepository                         { return s.cveRepo }
+func (s *sqliteDB) KEV() KEVRepository                         { return s.kevRepo }
+func (s *sqliteDB) EPSS() EPSSRepository                       { return s.epssRepo }
+func (s *sqliteDB) Metadata() MetadataRepository               { return s.metaRepo }
+func (s *sqliteDB) Checkpoint() CheckpointRepository           { return s.checkpointRepo }
+func (s *sqliteDB) CredentialProfile() CredentialProfileRepository    { return s.credProfileRepo }
+func (s *sqliteDB) AssetInventory() AssetInventoryRepository          { return s.assetRepo }
+func (s *sqliteDB) AssessmentResult() AssessmentResultRepository      { return s.assessResultRepo }
+func (s *sqliteDB) InstalledPackage() InstalledPackageRepository      { return s.pkgRepo }
+func (s *sqliteDB) InstalledSoftware() InstalledSoftwareRepository    { return s.swRepo }
+func (s *sqliteDB) SecurityFinding() SecurityFindingRepository        { return s.secFindingRepo }
+func (s *sqliteDB) CredentialValidation() CredentialValidationRepository { return s.credValidationRepo }
 
 // Info returns aggregate database statistics.
 func (s *sqliteDB) Info(ctx context.Context) (*models.DatabaseInfo, error) {
@@ -915,4 +936,368 @@ func (r *sqliteCheckpointRepo) Delete(ctx context.Context, feedName string) erro
 func (r *sqliteCheckpointRepo) DeleteAll(ctx context.Context) error {
 	_, err := r.db.ExecContext(ctx, "DELETE FROM update_checkpoints")
 	return err
+}
+
+
+// ============================================================================
+// Credential Profile Repository
+// ============================================================================
+
+type sqliteCredentialProfileRepo struct{ db *sql.DB }
+
+func (r *sqliteCredentialProfileRepo) List(ctx context.Context) ([]DBCredentialProfile, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, name, protocol, host, port, username, auth_method, credential_1, credential_2, credential_3, created_at, updated_at FROM credential_profiles ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DBCredentialProfile
+	for rows.Next() {
+		var p DBCredentialProfile
+		if err := rows.Scan(&p.ID, &p.Name, &p.Protocol, &p.Host, &p.Port, &p.Username, &p.AuthMethod, &p.Credential1, &p.Credential2, &p.Credential3, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, p)
+	}
+	return items, rows.Err()
+}
+
+func (r *sqliteCredentialProfileRepo) Get(ctx context.Context, id int64) (*DBCredentialProfile, error) {
+	p := &DBCredentialProfile{}
+	err := r.db.QueryRowContext(ctx, `SELECT id, name, protocol, host, port, username, auth_method, credential_1, credential_2, credential_3, created_at, updated_at FROM credential_profiles WHERE id = ?`, id).
+		Scan(&p.ID, &p.Name, &p.Protocol, &p.Host, &p.Port, &p.Username, &p.AuthMethod, &p.Credential1, &p.Credential2, &p.Credential3, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (r *sqliteCredentialProfileRepo) Create(ctx context.Context, p *DBCredentialProfile) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `INSERT INTO credential_profiles (name, protocol, host, port, username, auth_method, credential_1, credential_2, credential_3) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.Name, p.Protocol, p.Host, p.Port, p.Username, p.AuthMethod, p.Credential1, p.Credential2, p.Credential3)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (r *sqliteCredentialProfileRepo) Update(ctx context.Context, p *DBCredentialProfile) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE credential_profiles SET name=?, protocol=?, host=?, port=?, username=?, auth_method=?, credential_1=?, credential_2=?, credential_3=?, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?`,
+		p.Name, p.Protocol, p.Host, p.Port, p.Username, p.AuthMethod, p.Credential1, p.Credential2, p.Credential3, p.ID)
+	return err
+}
+
+func (r *sqliteCredentialProfileRepo) Delete(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM credential_profiles WHERE id = ?`, id)
+	return err
+}
+
+// ============================================================================
+// Asset Inventory Repository
+// ============================================================================
+
+type sqliteAssetInventoryRepo struct{ db *sql.DB }
+
+func (r *sqliteAssetInventoryRepo) Upsert(ctx context.Context, a *DBAssetInventory) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `INSERT INTO asset_inventory (hostname, ip, os, distro, kernel_version, architecture, asset_type, risk_score, last_seen, last_scan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(hostname, asset_type) DO UPDATE SET ip=excluded.ip, os=excluded.os, distro=excluded.distro, kernel_version=excluded.kernel_version, architecture=excluded.architecture, risk_score=excluded.risk_score, last_seen=excluded.last_seen, last_scan=excluded.last_scan`,
+		a.Hostname, a.IP, a.OS, a.Distro, a.KernelVersion, a.Architecture, a.AssetType, a.RiskScore, a.LastSeen, a.LastScan)
+	if err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if id > 0 {
+		return id, nil
+	}
+	// Already existed — fetch existing ID.
+	var existing int64
+	err = r.db.QueryRowContext(ctx, `SELECT id FROM asset_inventory WHERE hostname = ? AND asset_type = ?`, a.Hostname, a.AssetType).Scan(&existing)
+	return existing, err
+}
+
+func (r *sqliteAssetInventoryRepo) Get(ctx context.Context, id int64) (*DBAssetInventory, error) {
+	a := &DBAssetInventory{}
+	err := r.db.QueryRowContext(ctx, `SELECT id, hostname, ip, os, distro, kernel_version, architecture, asset_type, risk_score, last_seen, last_scan FROM asset_inventory WHERE id = ?`, id).
+		Scan(&a.ID, &a.Hostname, &a.IP, &a.OS, &a.Distro, &a.KernelVersion, &a.Architecture, &a.AssetType, &a.RiskScore, &a.LastSeen, &a.LastScan)
+	if err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+func (r *sqliteAssetInventoryRepo) FindByHostname(ctx context.Context, hostname, assetType string) (*DBAssetInventory, error) {
+	a := &DBAssetInventory{}
+	err := r.db.QueryRowContext(ctx, `SELECT id, hostname, ip, os, distro, kernel_version, architecture, asset_type, risk_score, last_seen, last_scan FROM asset_inventory WHERE hostname = ? AND asset_type = ?`, hostname, assetType).
+		Scan(&a.ID, &a.Hostname, &a.IP, &a.OS, &a.Distro, &a.KernelVersion, &a.Architecture, &a.AssetType, &a.RiskScore, &a.LastSeen, &a.LastScan)
+	if err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+func (r *sqliteAssetInventoryRepo) List(ctx context.Context) ([]DBAssetInventory, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, hostname, ip, os, distro, kernel_version, architecture, asset_type, risk_score, last_seen, last_scan FROM asset_inventory ORDER BY hostname`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DBAssetInventory
+	for rows.Next() {
+		var a DBAssetInventory
+		if err := rows.Scan(&a.ID, &a.Hostname, &a.IP, &a.OS, &a.Distro, &a.KernelVersion, &a.Architecture, &a.AssetType, &a.RiskScore, &a.LastSeen, &a.LastScan); err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, rows.Err()
+}
+
+func (r *sqliteAssetInventoryRepo) UpdateRiskScore(ctx context.Context, id int64, score float64) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE asset_inventory SET risk_score = ? WHERE id = ?`, score, id)
+	return err
+}
+
+func (r *sqliteAssetInventoryRepo) UpdateLastScan(ctx context.Context, id int64, scanTime string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE asset_inventory SET last_scan = ? WHERE id = ?`, scanTime, id)
+	return err
+}
+
+// ============================================================================
+// Assessment Result Repository
+// ============================================================================
+
+type sqliteAssessmentResultRepo struct{ db *sql.DB }
+
+func (r *sqliteAssessmentResultRepo) Create(ctx context.Context, ar *DBAssessmentResult) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `INSERT INTO assessment_results (target, profile_id, protocol, started_at, duration, result_json, status) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		ar.Target, ar.ProfileID, ar.Protocol, ar.StartedAt, ar.Duration, ar.ResultJSON, ar.Status)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (r *sqliteAssessmentResultRepo) List(ctx context.Context, limit int) ([]DBAssessmentResult, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, target, profile_id, protocol, started_at, duration, result_json, status FROM assessment_results ORDER BY started_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DBAssessmentResult
+	for rows.Next() {
+		var ar DBAssessmentResult
+		if err := rows.Scan(&ar.ID, &ar.Target, &ar.ProfileID, &ar.Protocol, &ar.StartedAt, &ar.Duration, &ar.ResultJSON, &ar.Status); err != nil {
+			return nil, err
+		}
+		items = append(items, ar)
+	}
+	return items, rows.Err()
+}
+
+func (r *sqliteAssessmentResultRepo) Get(ctx context.Context, id int64) (*DBAssessmentResult, error) {
+	ar := &DBAssessmentResult{}
+	err := r.db.QueryRowContext(ctx, `SELECT id, target, profile_id, protocol, started_at, duration, result_json, status FROM assessment_results WHERE id = ?`, id).
+		Scan(&ar.ID, &ar.Target, &ar.ProfileID, &ar.Protocol, &ar.StartedAt, &ar.Duration, &ar.ResultJSON, &ar.Status)
+	if err != nil {
+		return nil, err
+	}
+	return ar, nil
+}
+
+func (r *sqliteAssessmentResultRepo) ListByTarget(ctx context.Context, target string) ([]DBAssessmentResult, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, target, profile_id, protocol, started_at, duration, result_json, status FROM assessment_results WHERE target = ? ORDER BY started_at DESC`, target)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DBAssessmentResult
+	for rows.Next() {
+		var ar DBAssessmentResult
+		if err := rows.Scan(&ar.ID, &ar.Target, &ar.ProfileID, &ar.Protocol, &ar.StartedAt, &ar.Duration, &ar.ResultJSON, &ar.Status); err != nil {
+			return nil, err
+		}
+		items = append(items, ar)
+	}
+	return items, rows.Err()
+}
+
+// ============================================================================
+// Installed Package Repository (Linux)
+// ============================================================================
+
+type sqliteInstalledPackageRepo struct{ db *sql.DB }
+
+func (r *sqliteInstalledPackageRepo) Upsert(ctx context.Context, p *DBInstalledPackage) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `INSERT INTO installed_packages (asset_id, name, version, arch, cpe_2_3_uri, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+		ON CONFLICT(asset_id, name, arch) DO UPDATE SET version=excluded.version, cpe_2_3_uri=excluded.cpe_2_3_uri, status='installed', updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')`,
+		p.AssetID, p.Name, p.Version, p.Arch, p.CPE23URI)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (r *sqliteInstalledPackageRepo) ListByAsset(ctx context.Context, assetID int64) ([]DBInstalledPackage, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, asset_id, name, version, arch, cpe_2_3_uri, status, updated_at FROM installed_packages WHERE asset_id = ? ORDER BY name`, assetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DBInstalledPackage
+	for rows.Next() {
+		var p DBInstalledPackage
+		if err := rows.Scan(&p.ID, &p.AssetID, &p.Name, &p.Version, &p.Arch, &p.CPE23URI, &p.Status, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, p)
+	}
+	return items, rows.Err()
+}
+
+func (r *sqliteInstalledPackageRepo) MarkRemoved(ctx context.Context, assetID int64, keptNames []string) error {
+	// Build placeholder list for NOT IN clause.
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if len(keptNames) > 0 {
+		placeholders := make([]string, len(keptNames))
+		args := make([]interface{}, len(keptNames)+1)
+		args[0] = assetID
+		for i, name := range keptNames {
+			placeholders[i] = "?"
+			args[i+1] = name
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE installed_packages SET status='removed', updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE asset_id=? AND name NOT IN (`+strings.Join(placeholders, ",")+`)`, args...)
+	} else {
+		_, err = tx.ExecContext(ctx, `UPDATE installed_packages SET status='removed', updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE asset_id=?`, assetID)
+	}
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (r *sqliteInstalledPackageRepo) DeleteByAsset(ctx context.Context, assetID int64) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM installed_packages WHERE asset_id = ?`, assetID)
+	return err
+}
+
+// ============================================================================
+// Installed Software Repository (Windows)
+// ============================================================================
+
+type sqliteInstalledSoftwareRepo struct{ db *sql.DB }
+
+func (r *sqliteInstalledSoftwareRepo) Upsert(ctx context.Context, s *DBInstalledSoftware) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `INSERT INTO installed_software (asset_id, name, version, vendor, install_date, cpe_2_3_uri, updated_at) VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+		ON CONFLICT(asset_id, name, version) DO UPDATE SET vendor=excluded.vendor, install_date=excluded.install_date, cpe_2_3_uri=excluded.cpe_2_3_uri, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')`,
+		s.AssetID, s.Name, s.Version, s.Vendor, s.InstallDate, s.CPE23URI)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (r *sqliteInstalledSoftwareRepo) ListByAsset(ctx context.Context, assetID int64) ([]DBInstalledSoftware, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, asset_id, name, version, vendor, install_date, cpe_2_3_uri, updated_at FROM installed_software WHERE asset_id = ? ORDER BY name`, assetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DBInstalledSoftware
+	for rows.Next() {
+		var s DBInstalledSoftware
+		if err := rows.Scan(&s.ID, &s.AssetID, &s.Name, &s.Version, &s.Vendor, &s.InstallDate, &s.CPE23URI, &s.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, s)
+	}
+	return items, rows.Err()
+}
+
+func (r *sqliteInstalledSoftwareRepo) DeleteByAsset(ctx context.Context, assetID int64) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM installed_software WHERE asset_id = ?`, assetID)
+	return err
+}
+
+// ============================================================================
+// Security Finding Repository
+// ============================================================================
+
+type sqliteSecurityFindingRepo struct{ db *sql.DB }
+
+func (r *sqliteSecurityFindingRepo) BulkInsert(ctx context.Context, findings []DBSecurityFinding) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO security_findings (assessment_id, check_id, name, severity, status, evidence) VALUES (?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, f := range findings {
+		if _, err := stmt.ExecContext(ctx, f.AssessmentID, f.CheckID, f.Name, f.Severity, f.Status, f.Evidence); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *sqliteSecurityFindingRepo) ListByAssessment(ctx context.Context, assessmentID int64) ([]DBSecurityFinding, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, assessment_id, check_id, name, severity, status, evidence FROM security_findings WHERE assessment_id = ? ORDER BY severity DESC`, assessmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DBSecurityFinding
+	for rows.Next() {
+		var f DBSecurityFinding
+		if err := rows.Scan(&f.ID, &f.AssessmentID, &f.CheckID, &f.Name, &f.Severity, &f.Status, &f.Evidence); err != nil {
+			return nil, err
+		}
+		items = append(items, f)
+	}
+	return items, rows.Err()
+}
+
+// ============================================================================
+// Credential Validation Repository
+// ============================================================================
+
+type sqliteCredentialValidationRepo struct{ db *sql.DB }
+
+func (r *sqliteCredentialValidationRepo) Create(ctx context.Context, v *DBCredentialValidation) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `INSERT INTO credential_validations (profile_id, target, result_json, status) VALUES (?, ?, ?, ?)`,
+		v.ProfileID, v.Target, v.ResultJSON, v.Status)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (r *sqliteCredentialValidationRepo) ListByProfile(ctx context.Context, profileID int64, limit int) ([]DBCredentialValidation, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, profile_id, target, result_json, status, tested_at FROM credential_validations WHERE profile_id = ? ORDER BY tested_at DESC LIMIT ?`, profileID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DBCredentialValidation
+	for rows.Next() {
+		var v DBCredentialValidation
+		if err := rows.Scan(&v.ID, &v.ProfileID, &v.Target, &v.ResultJSON, &v.Status, &v.TestedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, v)
+	}
+	return items, rows.Err()
 }

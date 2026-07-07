@@ -102,3 +102,13 @@ report:
 
   # Minimum CVSS v3 score to include in report (0.0 = all)
   cvss_threshold: 0.0
+
+assessment:
+  # Directory for SSH private keys
+  ssh_key_dir: "ssh_keys"
+
+  # Encryption key for credential storage (auto-generated if empty)
+  encryption_key: ""
+
+  # Connection timeout for SSH/WinRM/SNMP
+  conn_timeout: "10s"

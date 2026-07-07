@@ -124,6 +124,86 @@ type CheckpointRepository interface {
 	DeleteAll(ctx context.Context) error
 }
 
+// CredentialProfileRepository manages credential profiles.
+type CredentialProfileRepository interface {
+	// List returns all credential profiles.
+	List(ctx context.Context) ([]DBCredentialProfile, error)
+	// Get returns a profile by ID.
+	Get(ctx context.Context, id int64) (*DBCredentialProfile, error)
+	// Create inserts a new profile.
+	Create(ctx context.Context, p *DBCredentialProfile) (int64, error)
+	// Update modifies an existing profile.
+	Update(ctx context.Context, p *DBCredentialProfile) error
+	// Delete removes a profile by ID.
+	Delete(ctx context.Context, id int64) error
+}
+
+// AssetInventoryRepository manages asset inventory.
+type AssetInventoryRepository interface {
+	// Upsert creates or updates an asset by hostname+type.
+	Upsert(ctx context.Context, a *DBAssetInventory) (int64, error)
+	// Get returns an asset by ID.
+	Get(ctx context.Context, id int64) (*DBAssetInventory, error)
+	// FindByHostname returns an asset by hostname and type.
+	FindByHostname(ctx context.Context, hostname, assetType string) (*DBAssetInventory, error)
+	// List returns all assets.
+	List(ctx context.Context) ([]DBAssetInventory, error)
+	// UpdateRiskScore updates the risk score for an asset.
+	UpdateRiskScore(ctx context.Context, id int64, score float64) error
+	// UpdateLastScan updates the last_scan timestamp.
+	UpdateLastScan(ctx context.Context, id int64, scanTime string) error
+}
+
+// AssessmentResultRepository manages assessment scan results.
+type AssessmentResultRepository interface {
+	// Create inserts a new assessment result.
+	Create(ctx context.Context, r *DBAssessmentResult) (int64, error)
+	// List returns assessment results, most recent first.
+	List(ctx context.Context, limit int) ([]DBAssessmentResult, error)
+	// Get returns an assessment result by ID.
+	Get(ctx context.Context, id int64) (*DBAssessmentResult, error)
+	// ListByTarget returns results for a specific target.
+	ListByTarget(ctx context.Context, target string) ([]DBAssessmentResult, error)
+}
+
+// InstalledPackageRepository manages per-asset installed packages.
+type InstalledPackageRepository interface {
+	// Upsert inserts or updates a package for an asset.
+	Upsert(ctx context.Context, p *DBInstalledPackage) (int64, error)
+	// ListByAsset returns all packages for an asset.
+	ListByAsset(ctx context.Context, assetID int64) ([]DBInstalledPackage, error)
+	// MarkRemoved marks packages not in the current scan as removed.
+	MarkRemoved(ctx context.Context, assetID int64, keptNames []string) error
+	// DeleteByAsset removes all package records for an asset.
+	DeleteByAsset(ctx context.Context, assetID int64) error
+}
+
+// InstalledSoftwareRepository manages per-asset installed software (Windows).
+type InstalledSoftwareRepository interface {
+	// Upsert inserts or updates a software entry for an asset.
+	Upsert(ctx context.Context, s *DBInstalledSoftware) (int64, error)
+	// ListByAsset returns all software for an asset.
+	ListByAsset(ctx context.Context, assetID int64) ([]DBInstalledSoftware, error)
+	// DeleteByAsset removes all software records for an asset.
+	DeleteByAsset(ctx context.Context, assetID int64) error
+}
+
+// SecurityFindingRepository stores security configuration findings.
+type SecurityFindingRepository interface {
+	// BulkInsert inserts findings for an assessment.
+	BulkInsert(ctx context.Context, findings []DBSecurityFinding) error
+	// ListByAssessment returns findings for a specific assessment.
+	ListByAssessment(ctx context.Context, assessmentID int64) ([]DBSecurityFinding, error)
+}
+
+// CredentialValidationRepository stores credential validation history.
+type CredentialValidationRepository interface {
+	// Create inserts a validation record.
+	Create(ctx context.Context, v *DBCredentialValidation) (int64, error)
+	// ListByProfile returns validation history for a profile.
+	ListByProfile(ctx context.Context, profileID int64, limit int) ([]DBCredentialValidation, error)
+}
+
 // Database is the top-level interface aggregating all repositories.
 type Database interface {
 	// Vendor returns the vendor repository.
@@ -142,6 +222,20 @@ type Database interface {
 	Metadata() MetadataRepository
 	// Checkpoint returns the checkpoint repository.
 	Checkpoint() CheckpointRepository
+	// CredentialProfile returns the credential profile repository.
+	CredentialProfile() CredentialProfileRepository
+	// AssetInventory returns the asset inventory repository.
+	AssetInventory() AssetInventoryRepository
+	// AssessmentResult returns the assessment result repository.
+	AssessmentResult() AssessmentResultRepository
+	// InstalledPackage returns the installed package repository.
+	InstalledPackage() InstalledPackageRepository
+	// InstalledSoftware returns the installed software repository.
+	InstalledSoftware() InstalledSoftwareRepository
+	// SecurityFinding returns the security finding repository.
+	SecurityFinding() SecurityFindingRepository
+	// CredentialValidation returns the credential validation repository.
+	CredentialValidation() CredentialValidationRepository
 
 	// Info returns a DatabaseInfo struct with aggregate stats.
 	Info(ctx context.Context) (*models.DatabaseInfo, error)

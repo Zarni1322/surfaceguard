@@ -12,13 +12,19 @@ import {
   Settings,
   ChevronLeft,
   Shield,
+  KeyRound,
+  ShieldCheck,
+  ClipboardCheck,
 } from "lucide-react";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/host-discovery", icon: ScanSearch, label: "Host Discovery" },
   { to: "/cve-discovery", icon: Bug, label: "CVE Discovery" },
+  { to: "/credentials", icon: KeyRound, label: "Credentials" },
+  { to: "/assessment", icon: ShieldCheck, label: "Assessment" },
   { to: "/assets", icon: Monitor, label: "Assets" },
+  { to: "/assessment-history", icon: ClipboardCheck, label: "Assessment History" },
   { to: "/scan-history", icon: History, label: "Scan History" },
   { to: "/reports", icon: FileText, label: "Reports" },
   { to: "/updates", icon: RefreshCw, label: "Update Center" },

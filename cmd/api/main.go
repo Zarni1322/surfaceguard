@@ -1,22 +1,27 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
-	"bufio"
-	"strconv"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/evilhunter/surfaceguard/internal/assessment"
+	"github.com/evilhunter/surfaceguard/internal/assessment/auth"
 	"github.com/evilhunter/surfaceguard/internal/config"
 	"github.com/evilhunter/surfaceguard/internal/database"
+	"github.com/evilhunter/surfaceguard/internal/matcher"
 	"github.com/evilhunter/surfaceguard/pkg/models"
 )
 
@@ -182,7 +187,7 @@ func main() {
 		fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "result", "scan": json.RawMessage(rawJSON)}))
 		flusher.Flush()
 
-		// Record to history
+		// Record to history (in-memory + persistent)
 		started, _ := time.Parse(time.RFC3339, getStr(rawResult, "started_at"))
 		portsFound := int(getFloat(rawResult, "open_ports"))
 		findingsCount := int(getFloat(rawResult, "findings"))
@@ -202,6 +207,25 @@ func main() {
 		scanHistory = append([]scanRecord{rec}, scanHistory...)
 		if len(scanHistory) > 100 { scanHistory = scanHistory[:100] }
 		historyMu.Unlock()
+
+		// Persist to assessment_results table for dashboard
+		go func() {
+			ctx := context.Background()
+			db := openDB(cfg, ctx, nil)
+			if db != nil {
+				defer db.Close()
+				jsonResult, _ := json.Marshal(rawResult)
+				db.AssessmentResult().Create(ctx, &database.DBAssessmentResult{
+					Target:     target,
+					ProfileID:  0,
+					Protocol:   "cve-discovery",
+					StartedAt:  started.Format(time.RFC3339),
+					Duration:   durStr,
+					ResultJSON: string(jsonResult),
+					Status:     "completed",
+				})
+			}
+		}()
 
 		fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "progress", "percent": 100, "text": "Scan complete"}))
 		flusher.Flush()
@@ -421,6 +445,15 @@ func main() {
 		})
 	})
 
+		// Assessment API routes
+		mux.HandleFunc("/api/credentials/profiles", handleCredProfiles)
+		mux.HandleFunc("/api/credentials/profile", handleCredProfile)
+		mux.HandleFunc("/api/credentials/validate", handleValidateCredentials)
+		mux.HandleFunc("/api/assessment/scan", handleAssessmentScan)
+		mux.HandleFunc("/api/assessment/history", handleAssessmentHistory)
+		mux.HandleFunc("/api/assets", handleAssets)
+		mux.HandleFunc("/api/asset", handleAsset)
+
 	addr := ":8080"
 	fmt.Printf("SurfaceGuard API server on %s\n", addr)
 	log.Fatal(http.ListenAndServe(addr, handler))
@@ -610,6 +643,183 @@ func writeJSON(w http.ResponseWriter, v interface{}) {
 func jsonStr(v interface{}) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+// ============================================================================
+// Assessment API Handlers
+// ============================================================================
+
+var assessEngine *assessment.Engine
+
+func initAssessmentEngine(cfg *config.Config, ctx context.Context) *assessment.Engine {
+	if assessEngine != nil { return assessEngine }
+	dbPath, err := cfg.ResolveDatabasePath()
+	if err != nil { return nil }
+	db, err := database.NewSQLiteDatabase(ctx, dbPath)
+	if err != nil { return nil }
+	m := matcher.New(db)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	assessEngine = assessment.NewEngine(&cfg.Assessment, db, m, logger)
+	return assessEngine
+}
+
+// Credential Profiles
+func handleCredProfiles(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	eng := initAssessmentEngine(loadConfigOrPanic(), ctx)
+	if eng == nil { http.Error(w, "engine init failed", 500); return }
+
+	switch r.Method {
+	case "GET":
+		profiles, err := eng.ListProfiles(ctx)
+		if err != nil { http.Error(w, err.Error(), 500); return }
+		writeJSON(w, profiles)
+
+	case "POST":
+		var req struct {
+			Name       string `json:"name"`
+			Protocol   string `json:"protocol"`
+			Host       string `json:"host"`
+			Port       int    `json:"port"`
+			Username   string `json:"username"`
+			AuthMethod string `json:"auth_method"`
+			Password   string `json:"password,omitempty"`
+			PrivateKey string `json:"private_key,omitempty"`
+			Passphrase string `json:"passphrase,omitempty"`
+			Community  string `json:"community,omitempty"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), 400); return
+		}
+		profile := &auth.Profile{
+			Name:       req.Name,
+			Protocol:   models.Protocol(req.Protocol),
+			Host:       req.Host,
+			Port:       req.Port,
+			Username:   req.Username,
+			AuthMethod: req.AuthMethod,
+			Password:   req.Password,
+			PrivateKey: req.PrivateKey,
+			Community:  req.Community,
+		}
+		id, err := eng.CreateProfile(ctx, profile)
+		if err != nil { http.Error(w, err.Error(), 400); return }
+		writeJSON(w, map[string]int64{"id": id})
+
+	default:
+		http.Error(w, "method not allowed", 405)
+	}
+}
+
+func handleCredProfile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	eng := initAssessmentEngine(loadConfigOrPanic(), ctx)
+	if eng == nil { http.Error(w, "engine init failed", 500); return }
+
+	if r.Method == "DELETE" {
+		id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+		if err != nil { http.Error(w, "invalid id", 400); return }
+		if err := eng.DeleteProfile(ctx, id); err != nil { http.Error(w, err.Error(), 500); return }
+		writeJSON(w, map[string]string{"status": "deleted"})
+		return
+	}
+	http.Error(w, "method not allowed", 405)
+}
+
+// Credential Validation (Test Connection)
+func handleValidateCredentials(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	eng := initAssessmentEngine(loadConfigOrPanic(), ctx)
+	if eng == nil { http.Error(w, "engine init failed", 500); return }
+
+	var req struct {
+		ProfileID int64 `json:"profile_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), 400); return
+	}
+
+	result, err := eng.ValidateCredentials(ctx, req.ProfileID)
+	if err != nil {
+		writeJSON(w, map[string]interface{}{"status": "FAILED", "error": err.Error()})
+		return
+	}
+	writeJSON(w, result)
+}
+
+// Authenticated Assessment
+func handleAssessmentScan(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	eng := initAssessmentEngine(loadConfigOrPanic(), ctx)
+	if eng == nil { http.Error(w, "engine init failed", 500); return }
+
+	profileID, err := strconv.ParseInt(r.URL.Query().Get("profile_id"), 10, 64)
+	if err != nil { http.Error(w, "profile_id required", 400); return }
+
+	result, err := eng.RunAssessment(ctx, profileID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("assessment failed: %v", err), 500)
+		return
+	}
+	writeJSON(w, result)
+}
+
+// Assessment History
+func handleAssessmentHistory(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	eng := initAssessmentEngine(loadConfigOrPanic(), ctx)
+	if eng == nil { http.Error(w, "engine init failed", 500); return }
+
+	limitStr := r.URL.Query().Get("limit")
+	limit := 20
+	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+		limit = l
+	}
+
+	results, err := eng.ListHistory(ctx, limit)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	writeJSON(w, results)
+}
+
+// Asset Inventory
+func handleAssets(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	eng := initAssessmentEngine(loadConfigOrPanic(), ctx)
+	if eng == nil { http.Error(w, "engine init failed", 500); return }
+
+	db := openDB(loadConfigOrPanic(), ctx, w)
+	if db == nil { return }
+	assets, err := db.AssetInventory().List(ctx)
+	if err != nil { http.Error(w, err.Error(), 500); return }
+	writeJSON(w, assets)
+}
+
+func handleAsset(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	if err != nil { http.Error(w, "invalid id", 400); return }
+
+	db := openDB(loadConfigOrPanic(), ctx, w)
+	if db == nil { return }
+
+	asset, err := db.AssetInventory().Get(ctx, id)
+	if err != nil { http.Error(w, "not found", 404); return }
+
+	// Gather packages, software, findings.
+	packages, _ := db.InstalledPackage().ListByAsset(ctx, id)
+	software, _ := db.InstalledSoftware().ListByAsset(ctx, id)
+
+	writeJSON(w, map[string]interface{}{
+		"asset":    asset,
+		"packages": packages,
+		"software": software,
+	})
+}
+
+func loadConfigOrPanic() *config.Config {
+	cfg, err := config.LoadConfig("")
+	if err != nil { log.Printf("config: %v", err) }
+	return cfg
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

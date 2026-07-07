@@ -63,7 +63,7 @@ export default function UpdatesPage() {
   const feedStatus = updating ? "updating" : (dbInfo?.cve_count ? "up-to-date" : "unknown");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 p-3 md:p-4 lg:p-5 xl:p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[#F8FAFC]">Update Center</h1>
@@ -106,7 +106,7 @@ export default function UpdatesPage() {
       )}
 
       {/* Feed Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <FeedCard
           name="NVD"
           description="National Vulnerability Database"
@@ -139,7 +139,7 @@ export default function UpdatesPage() {
           <CardTitle className="text-lg text-[#F8FAFC]">Database Summary</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
             <div className="rounded-lg bg-[#0B1220] p-4">
               <p className="text-xs text-[#94A3B8]">Schema</p>
               <p className="text-lg font-bold text-[#F8FAFC]">v{dbInfo?.schema_version ?? "—"}</p>

@@ -11,7 +11,7 @@ export default function DatabasePage() {
   const lastUpdate = dbInfo?.last_updated ? formatDate(dbInfo.last_updated) : "N/A";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 p-3 md:p-4 lg:p-5 xl:p-6">
       <div>
         <h1 className="text-2xl font-bold text-[#F8FAFC]">Database</h1>
         <p className="text-sm text-[#94A3B8] mt-1">
@@ -19,13 +19,13 @@ export default function DatabasePage() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-3 grid-cols-1 lg:grid-cols-2">
         <Card className="border-[#1E293B] bg-[#1E293B]">
           <CardHeader>
             <CardTitle className="text-lg text-[#F8FAFC]">Database Statistics</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <StatRow label="Schema Version" value={`v${dbInfo?.schema_version ?? "—"}`} />
               <StatRow label="Last Updated" value={lastUpdate} />
               <StatRow label="Total CVEs" value={(dbInfo?.cve_count ?? 0).toLocaleString()} />

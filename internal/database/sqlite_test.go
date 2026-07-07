@@ -29,7 +29,7 @@ func TestNewSQLiteDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Info failed: %v", err)
 	}
-	if info.SchemaVersion != 4 {
+	if info.SchemaVersion != 5 {
 		t.Errorf("expected schema version 2, got %d", info.SchemaVersion)
 	}
 }
@@ -340,7 +340,7 @@ func TestInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Info failed: %v", err)
 	}
-	if info.SchemaVersion != 4 {
+	if info.SchemaVersion != 5 {
 		t.Errorf("expected schema version 2, got %d", info.SchemaVersion)
 	}
 }

@@ -79,3 +79,96 @@ type DBCheckpoint struct {
 	UpdatedAt   string `db:"updated_at"`
 	CreatedAt   string `db:"created_at"`
 }
+
+// ============================================================================
+// Authenticated Assessment DB Types
+// ============================================================================
+
+// DBCredentialProfile represents a row in the credential_profiles table.
+type DBCredentialProfile struct {
+	ID        int64  `db:"id"`
+	Name      string `db:"name"`
+	Protocol  string `db:"protocol"`
+	Host      string `db:"host"`
+	Port      int    `db:"port"`
+	Username  string `db:"username"`
+	AuthMethod string `db:"auth_method"`
+	// Encrypted fields (AES-GCM, hex-encoded)
+	Credential1 string `db:"credential_1"` // password, private key, or community string
+	Credential2 string `db:"credential_2"` // passphrase (SSH key), or SNMPv3 auth/proto
+	Credential3 string `db:"credential_3"` // SNMPv3 priv/proto
+	CreatedAt  string `db:"created_at"`
+	UpdatedAt  string `db:"updated_at"`
+}
+
+// DBAssetInventory represents a row in the asset_inventory table.
+type DBAssetInventory struct {
+	ID            int64   `db:"id"`
+	Hostname      string  `db:"hostname"`
+	IP            string  `db:"ip"`
+	OS            string  `db:"os"`
+	Distro        string  `db:"distro"`
+	KernelVersion string  `db:"kernel_version"`
+	Architecture  string  `db:"architecture"`
+	AssetType     string  `db:"asset_type"`
+	RiskScore     float64 `db:"risk_score"`
+	LastSeen      string  `db:"last_seen"`
+	LastScan      string  `db:"last_scan"`
+}
+
+// DBAssessmentResult represents a row in the assessment_results table.
+type DBAssessmentResult struct {
+	ID          int64  `db:"id"`
+	Target      string `db:"target"`
+	ProfileID   int64  `db:"profile_id"`
+	Protocol    string `db:"protocol"`
+	StartedAt   string `db:"started_at"`
+	Duration    string `db:"duration"`
+	ResultJSON  string `db:"result_json"`
+	Status      string `db:"status"`
+}
+
+// DBInstalledPackage represents a row in the installed_packages table.
+type DBInstalledPackage struct {
+	ID        int64  `db:"id"`
+	AssetID   int64  `db:"asset_id"`
+	Name      string `db:"name"`
+	Version   string `db:"version"`
+	Arch      string `db:"arch"`
+	CPE23URI  string `db:"cpe_2_3_uri"`
+	Status    string `db:"status"` // installed, removed, changed
+	UpdatedAt string `db:"updated_at"`
+}
+
+// DBInstalledSoftware represents a row in the installed_software table.
+type DBInstalledSoftware struct {
+	ID          int64  `db:"id"`
+	AssetID     int64  `db:"asset_id"`
+	Name        string `db:"name"`
+	Version     string `db:"version"`
+	Vendor      string `db:"vendor"`
+	InstallDate string `db:"install_date"`
+	CPE23URI    string `db:"cpe_2_3_uri"`
+	UpdatedAt   string `db:"updated_at"`
+}
+
+// DBSecurityFinding represents a row in the security_findings table.
+type DBSecurityFinding struct {
+	ID           int64  `db:"id"`
+	AssessmentID int64  `db:"assessment_id"`
+	CheckID      string `db:"check_id"`
+	Name         string `db:"name"`
+	Severity     string `db:"severity"`
+	Status       string `db:"status"`
+	Evidence     string `db:"evidence"`
+}
+
+// DBCredentialValidation represents a row in the credential_validations table.
+type DBCredentialValidation struct {
+	ID             int64  `db:"id"`
+	ProfileID      int64  `db:"profile_id"`
+	Target         string `db:"target"`
+	ResultJSON     string `db:"result_json"`
+	Status         string `db:"status"`
+	TestedAt       string `db:"tested_at"`
+}

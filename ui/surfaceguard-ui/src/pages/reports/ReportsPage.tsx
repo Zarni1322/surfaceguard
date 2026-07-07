@@ -71,7 +71,7 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 p-3 md:p-4 lg:p-5 xl:p-6">
       <div>
         <h1 className="text-2xl font-bold text-[#F8FAFC]">Reports</h1>
         <p className="text-sm text-[#94A3B8] mt-1">
@@ -96,7 +96,7 @@ export default function ReportsPage() {
       </Card>
 
       {/* Format Selection */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         {formats.map((fmt) => (
           <button
             key={fmt.key}

@@ -127,3 +127,105 @@ export interface SystemInfo {
   feed_status: string;
   last_update: string;
 }
+
+// ============================================================================
+// Authenticated Assessment Types
+// ============================================================================
+
+export interface CredentialProfile {
+  id: number;
+  name: string;
+  protocol: string;
+  host: string;
+  port: number;
+  username: string;
+  auth_method: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ValidationCheck {
+  name: string;
+  status: string; // pass, warn, fail
+  message?: string;
+}
+
+export interface ValidationResult {
+  status: string; // SUCCESS, WARNING, FAILED
+  checks: ValidationCheck[];
+  tested_at: string;
+  profile_id: number;
+  target: string;
+}
+
+export interface AssetInfo {
+  id: number;
+  hostname: string;
+  ip: string;
+  os: string;
+  distro: string;
+  kernel_version: string;
+  architecture: string;
+  asset_type: string;
+  risk_score: number;
+  last_seen: string;
+  last_scan: string;
+}
+
+export interface InstalledPackage {
+  name: string;
+  version: string;
+  arch: string;
+  cpe_2_3_uri: string;
+  status: string;
+}
+
+export interface InstalledSoftware {
+  name: string;
+  version: string;
+  vendor: string;
+  install_date: string;
+  cpe_2_3_uri: string;
+}
+
+export interface SecurityFinding {
+  check_id: string;
+  name: string;
+  severity: string;
+  status: string;
+  evidence?: string;
+}
+
+export interface AssessmentResult {
+  id: number;
+  target: string;
+  profile_id: number;
+  profile_name: string;
+  protocol: string;
+  started_at: string;
+  duration: string;
+  asset?: AssetInfo;
+  packages?: InstalledPackage[];
+  software?: InstalledSoftware[];
+  findings?: SecurityFinding[];
+  cves?: CVE[];
+  risk_score: number;
+  validation?: ValidationResult;
+  status: string;
+}
+
+export interface AssetDetail {
+  id: number;
+  hostname: string;
+  ip: string;
+  os: string;
+  distro: string;
+  kernel_version: string;
+  architecture: string;
+  asset_type: string;
+  risk_score: number;
+  last_seen: string;
+  last_scan: string;
+  packages?: InstalledPackage[];
+  software?: InstalledSoftware[];
+}

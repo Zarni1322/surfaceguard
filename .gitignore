@@ -90,3 +90,4 @@ ui/surfaceguard-ui/dist/
 .claude/
 data/*.bk
 data/*.bak
+downloads/

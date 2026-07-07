@@ -1,6 +1,6 @@
 package database
 
-const schemaVersion = 4
+const schemaVersion = 5
 
 // schema holds all CREATE TABLE statements. Each migration is a versioned step.
 // Always append new migrations; never modify existing ones.
@@ -9,6 +9,7 @@ var schema = map[int]string{
 	2: schemaV2,
 	3: schemaV3,
 	4: schemaV4,
+	5: schemaV5,
 }
 
 const schemaV1 = `
@@ -195,5 +196,100 @@ CREATE TABLE IF NOT EXISTS update_checkpoints (
     message      TEXT NOT NULL DEFAULT '',
     updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+`
+
+const schemaV5 = `
+-- Credential profiles: reusable authentication templates
+CREATE TABLE IF NOT EXISTS credential_profiles (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    name         TEXT NOT NULL UNIQUE,
+    protocol     TEXT NOT NULL,
+    host         TEXT NOT NULL DEFAULT '',
+    port         INTEGER NOT NULL DEFAULT 0,
+    username     TEXT NOT NULL DEFAULT '',
+    auth_method  TEXT NOT NULL DEFAULT 'password',
+    credential_1 TEXT NOT NULL DEFAULT '',
+    credential_2 TEXT NOT NULL DEFAULT '',
+    credential_3 TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- Asset inventory: discovered hosts
+CREATE TABLE IF NOT EXISTS asset_inventory (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    hostname       TEXT NOT NULL,
+    ip             TEXT NOT NULL DEFAULT '',
+    os             TEXT NOT NULL DEFAULT '',
+    distro         TEXT NOT NULL DEFAULT '',
+    kernel_version TEXT NOT NULL DEFAULT '',
+    architecture   TEXT NOT NULL DEFAULT '',
+    asset_type     TEXT NOT NULL DEFAULT 'linux',
+    risk_score     REAL NOT NULL DEFAULT 0.0,
+    last_seen      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    last_scan      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE(hostname, asset_type)
+);
+
+-- Assessment results: authenticated scan history
+CREATE TABLE IF NOT EXISTS assessment_results (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    target      TEXT NOT NULL,
+    profile_id  INTEGER NOT NULL DEFAULT 0,
+    protocol    TEXT NOT NULL DEFAULT '',
+    started_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    duration    TEXT NOT NULL DEFAULT '',
+    result_json TEXT NOT NULL DEFAULT '{}',
+    status      TEXT NOT NULL DEFAULT 'completed'
+);
+CREATE INDEX IF NOT EXISTS idx_assessment_results_time ON assessment_results(started_at);
+CREATE INDEX IF NOT EXISTS idx_assessment_results_target ON assessment_results(target);
+
+-- Installed packages (Linux): per-host package snapshots
+CREATE TABLE IF NOT EXISTS installed_packages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id    INTEGER NOT NULL REFERENCES asset_inventory(id),
+    name        TEXT NOT NULL,
+    version     TEXT NOT NULL DEFAULT '',
+    arch        TEXT NOT NULL DEFAULT '',
+    cpe_2_3_uri TEXT NOT NULL DEFAULT '',
+    status      TEXT NOT NULL DEFAULT 'installed',
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE(asset_id, name, arch)
+);
+
+-- Installed software (Windows): per-host software snapshots
+CREATE TABLE IF NOT EXISTS installed_software (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id     INTEGER NOT NULL REFERENCES asset_inventory(id),
+    name         TEXT NOT NULL,
+    version      TEXT NOT NULL DEFAULT '',
+    vendor       TEXT NOT NULL DEFAULT '',
+    install_date TEXT NOT NULL DEFAULT '',
+    cpe_2_3_uri  TEXT NOT NULL DEFAULT '',
+    updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE(asset_id, name, version)
+);
+
+-- Security findings: configuration assessment results
+CREATE TABLE IF NOT EXISTS security_findings (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    assessment_id  INTEGER NOT NULL REFERENCES assessment_results(id),
+    check_id       TEXT NOT NULL,
+    name           TEXT NOT NULL DEFAULT '',
+    severity       TEXT NOT NULL DEFAULT 'INFO',
+    status         TEXT NOT NULL DEFAULT 'fail',
+    evidence       TEXT NOT NULL DEFAULT ''
+);
+
+-- Credential validations: test connection history
+CREATE TABLE IF NOT EXISTS credential_validations (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id  INTEGER NOT NULL,
+    target      TEXT NOT NULL DEFAULT '',
+    result_json TEXT NOT NULL DEFAULT '{}',
+    status      TEXT NOT NULL DEFAULT '',
+    tested_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 `
