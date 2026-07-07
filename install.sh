@@ -92,14 +92,6 @@ npm install --silent 2>&1 | tail -1
 cd "$SCRIPT_DIR"
 log "Frontend dependencies installed"
 
-# ---- Initial database setup ----
-log "Initializing database..."
-./surfaceguard update > /dev/null 2>&1 &
-UPDATE_PID=$!
-echo -n "  Downloading vulnerability feeds (this may take a while)... "
-wait $UPDATE_PID 2>/dev/null
-echo "done"
-
 # ---- Summary ----
 echo ""
 echo "  ${BOLD}${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
