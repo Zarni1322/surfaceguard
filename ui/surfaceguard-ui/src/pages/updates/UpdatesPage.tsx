@@ -1,52 +1,66 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { RefreshCw, Loader2, Database, CheckCircle2, AlertCircle } from "lucide-react";
-import { useDbInfo, useTriggerUpdate } from "@/hooks/useApi";
+import { useDbInfo } from "@/hooks/useApi";
 import { formatDate } from "@/lib/utils";
 
 export default function UpdatesPage() {
   const { data: dbInfo, isLoading, refetch } = useDbInfo();
-  const updateMutation = useTriggerUpdate();
+  const [updating, setUpdating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressText, setProgressText] = useState("");
-  const [updating, setUpdating] = useState(false);
+  const [phase, setPhase] = useState("idle");
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const handleUpdate = () => {
     setUpdating(true);
     setProgress(0);
     setProgressText("Starting update...");
+    setPhase("downloading");
 
-    const interval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 85) return prev;
-        return prev + Math.random() * 5;
-      });
-    }, 1000);
+    const es = new EventSource("/api/update");
+    eventSourceRef.current = es;
 
-    updateMutation.mutate(undefined, {
-      onSuccess: () => {
-        clearInterval(interval);
-        setProgress(100);
-        setProgressText("Update complete");
-        setTimeout(() => {
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "progress") {
+          setProgress(data.percent);
+          setProgressText(data.text);
+        } else if (data.type === "result" && data.status === "completed") {
+          setProgress(100);
+          setProgressText("Update complete");
+          setPhase("complete");
           setUpdating(false);
+          es.close();
           refetch();
-        }, 1000);
-        toast.success("All feeds updated successfully");
-      },
-      onError: (err: any) => {
-        clearInterval(interval);
-        setProgress(0);
-        setUpdating(false);
-        toast.error(err?.message || "Update failed");
-      },
-    });
+          toast.success("All feeds updated");
+        }
+      } catch (e) {
+        // ignore parse errors
+      }
+    };
+
+    es.onerror = () => {
+      // If we got to 100%, it was a clean completion
+      if (progress >= 100) return;
+      setProgressText("Connection lost — update may still be running");
+      setUpdating(false);
+      es.close();
+    };
   };
 
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) eventSourceRef.current.close();
+    };
+  }, []);
+
   const lastUpdate = dbInfo?.last_updated ? formatDate(dbInfo.last_updated) : "Unknown";
+  const feedStatus = updating ? "updating" : (dbInfo?.cve_count ? "up-to-date" : "unknown");
 
   return (
     <div className="space-y-6">
@@ -69,23 +83,24 @@ export default function UpdatesPage() {
         </Button>
       </div>
 
-      {/* Progress Bar */}
+      {/* Real-time Progress Bar */}
       {updating && (
         <Card className="border-[#1E293B] bg-[#1E293B]">
-          <CardContent className="pt-6 space-y-3">
+          <CardContent className="pt-6 space-y-4">
             <div className="flex items-center justify-between text-sm">
               <span className="text-[#94A3B8]">{progressText}</span>
-              <span className="text-[#3B82F6] font-mono font-bold">{Math.round(progress)}%</span>
+              <span className="text-[#3B82F6] font-mono font-bold">{progress}%</span>
             </div>
             <div className="h-3 rounded-full bg-[#0B1220] overflow-hidden">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[#3B82F6] to-[#22C55E] transition-all duration-700 ease-out"
-                style={{ width: `${Math.min(progress, 100)}%` }}
+                className="h-full rounded-full bg-gradient-to-r from-[#3B82F6] via-[#8B5CF6] to-[#22C55E] transition-all duration-500 ease-out"
+                style={{ width: `${progress}%` }}
               />
             </div>
-            <p className="text-xs text-[#94A3B8]">
-              Downloading and processing CVE, KEV, and EPSS data...
-            </p>
+            <div className="flex items-center gap-2 text-xs text-[#94A3B8]">
+              <div className="h-2 w-2 rounded-full bg-[#3B82F6] animate-pulse" />
+              Downloading NVD CVE data — this may take several minutes
+            </div>
           </CardContent>
         </Card>
       )}
@@ -97,8 +112,8 @@ export default function UpdatesPage() {
           description="National Vulnerability Database"
           count={dbInfo?.cve_count ?? 0}
           lastUpdate={lastUpdate}
-          loading={isLoading}
-          status={dbInfo?.cve_count ? "up-to-date" : "unknown"}
+          loading={isLoading || (updating && phase === "downloading")}
+          status={feedStatus}
         />
         <FeedCard
           name="CISA KEV"
@@ -118,7 +133,7 @@ export default function UpdatesPage() {
         />
       </div>
 
-      {/* DB Info */}
+      {/* DB Summary */}
       <Card className="border-[#1E293B] bg-[#1E293B]">
         <CardHeader>
           <CardTitle className="text-lg text-[#F8FAFC]">Database Summary</CardTitle>
@@ -175,6 +190,8 @@ function FeedCard({
               <h3 className="font-semibold text-[#F8FAFC]">{name}</h3>
               {status === "up-to-date" ? (
                 <CheckCircle2 className="h-4 w-4 text-[#22C55E]" />
+              ) : status === "updating" ? (
+                <Loader2 className="h-4 w-4 animate-spin text-[#3B82F6]" />
               ) : (
                 <AlertCircle className="h-4 w-4 text-[#F59E0B]" />
               )}
@@ -198,10 +215,12 @@ function FeedCard({
                   className={
                     status === "up-to-date"
                       ? "border-[#22C55E] text-[#22C55E] text-[10px]"
+                      : status === "updating"
+                      ? "border-[#3B82F6] text-[#3B82F6] text-[10px] animate-pulse"
                       : "border-[#F59E0B] text-[#F59E0B] text-[10px]"
                   }
                 >
-                  {status === "up-to-date" ? "Up-to-date" : "Unknown"}
+                  {status === "up-to-date" ? "Up-to-date" : status === "updating" ? "Updating..." : "Unknown"}
                 </Badge>
               </div>
             </div>

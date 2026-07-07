@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"bufio"
+	"strconv"
 	"fmt"
 	"log"
 	"net"
@@ -216,14 +218,61 @@ func main() {
 
 	// Trigger update
 	mux.HandleFunc("/api/update", func(w http.ResponseWriter, r *http.Request) {
-		go func() {
-			runSurfaceGuard("update")
-		}()
-		writeJSON(w, map[string]string{"status": "started"})
-	})
+		flusher, ok := w.(http.Flusher)
+		if !ok { http.Error(w, "streaming not supported", 500); return }
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
 
-	mux.HandleFunc("/api/update/status", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]interface{}{"running": false, "progress": "idle"})
+		fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "progress", "percent": 2, "text": "Starting update..."}))
+		flusher.Flush()
+
+		// Run update synchronously, capture real-time output
+		cmd := exec.Command("./surfaceguard", "update")
+		stdout, _ := cmd.StdoutPipe()
+		cmd.Stderr = cmd.Stdout
+		cmd.Start()
+
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			line := scanner.Text()
+			// Parse progress from CVE download line
+			if strings.Contains(line, "CVE Download:") {
+				// Extract percentage: [===> ] 45%
+				pct := 10
+				text := "Downloading CVEs..."
+				// Try to parse "XX%"
+				if idx := strings.Index(line, "%"); idx >= 2 {
+					pctStr := ""
+					for j := idx - 3; j < idx; j++ {
+						if j >= 0 && line[j] >= '0' && line[j] <= '9' {
+							pctStr += string(line[j])
+						}
+					}
+					if p, err := strconv.Atoi(pctStr); err == nil && p > 0 {
+						pct = p
+					}
+				}
+				if pct > 95 { pct = 95 }
+				fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "progress", "percent": pct, "text": text}))
+				flusher.Flush()
+			} else if strings.Contains(line, "KEV") && strings.Contains(line, "Already") {
+				fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "progress", "percent": 96, "text": "KEV up to date"}))
+				flusher.Flush()
+			} else if strings.Contains(line, "EPSS") && strings.Contains(line, "inserted") {
+				fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "progress", "percent": 98, "text": "EPSS scores downloaded"}))
+				flusher.Flush()
+			} else if strings.Contains(line, "inserted") {
+				fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "progress", "percent": 90, "text": line}))
+				flusher.Flush()
+			}
+		}
+		cmd.Wait()
+
+		fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "progress", "percent": 100, "text": "Update complete"}))
+		flusher.Flush()
+		fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "result", "status": "completed"}))
+		flusher.Flush()
 	})
 
 	// Report Generation
