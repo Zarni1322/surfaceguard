@@ -23,7 +23,7 @@ ui/surfaceguard-ui/dist/
 ui/surfaceguard-ui/build/
 
 # ─── Reports / Exports ────────────────────────────────────
-reports/
+/reports/
 exports/
 !internal/report/*.go
 !cmd/api/main.go
