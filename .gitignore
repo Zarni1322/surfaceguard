@@ -85,3 +85,6 @@ data/*.db-journal
 !*.html
 ui/surfaceguard-ui/dist/
 *.test
+
+# Claude Code
+.claude/
