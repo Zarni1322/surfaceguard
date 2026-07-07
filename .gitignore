@@ -88,3 +88,5 @@ ui/surfaceguard-ui/dist/
 
 # Claude Code
 .claude/
+data/*.bk
+data/*.bak

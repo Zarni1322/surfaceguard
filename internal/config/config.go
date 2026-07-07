@@ -51,15 +51,17 @@ type DatabaseConfig struct {
 }
 // UpdateConfig configures CVE/CPE/KEV data feed downloads.
 type UpdateConfig struct {
-	Enabled      bool   `yaml:"enabled"`
-	CVEBaseURL   string `yaml:"cve_base_url"`
-	CPEBaseURL   string `yaml:"cpe_base_url"`
-	KEVBaseURL   string `yaml:"kev_base_url"`
-	EPSSBaseURL  string `yaml:"epss_base_url"`
-	HTTPTimeout  string `yaml:"http_timeout"`
-	RetryCount   int    `yaml:"retry_count"`
-	RetryDelay   string `yaml:"retry_delay"`
-	Incremental  bool   `yaml:"incremental"`
+	Enabled       bool   `yaml:"enabled"`
+	CVEBaseURL    string `yaml:"cve_base_url"`
+	CPEBaseURL    string `yaml:"cpe_base_url"`
+	KEVBaseURL    string `yaml:"kev_base_url"`
+	EPSSBaseURL   string `yaml:"epss_base_url"`
+	HTTPTimeout   string `yaml:"http_timeout"`
+	RetryCount    int    `yaml:"retry_count"`
+	RetryDelay    string `yaml:"retry_delay"`
+	MaxRetryDelay string `yaml:"max_retry_delay"`
+	Incremental   bool   `yaml:"incremental"`
+	DownloadsDir  string `yaml:"downloads_dir"`
 }
 // LoggingConfig configures structured logging.
 type LoggingConfig struct {
@@ -96,15 +98,17 @@ func DefaultConfig() *Config {
 			ConnMaxLifetime: "30m",
 		},
 		Update: UpdateConfig{
-			Enabled:      true,
-			CVEBaseURL:   "https://services.nvd.nist.gov/rest/json/cves/2.0",
-			CPEBaseURL:   "https://services.nvd.nist.gov/rest/json/cpes/2.0",
-			KEVBaseURL:   "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
-			EPSSBaseURL:  "https://epss.cyentia.com/epss_scores-current.csv.gz",
-			HTTPTimeout:  "300s",
-			RetryCount:   3,
-			RetryDelay:   "5s",
-			Incremental:  true,
+			Enabled:       true,
+			CVEBaseURL:    "https://services.nvd.nist.gov/rest/json/cves/2.0",
+			CPEBaseURL:    "https://services.nvd.nist.gov/rest/json/cpes/2.0",
+			KEVBaseURL:    "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+			EPSSBaseURL:   "https://epss.cyentia.com/epss_scores-current.csv.gz",
+			HTTPTimeout:   "300s",
+			RetryCount:    3,
+			RetryDelay:    "5s",
+			MaxRetryDelay: "60s",
+			Incremental:   true,
+			DownloadsDir:  "downloads",
 		},
 		Logging: LoggingConfig{
 			Level:  "info",
@@ -240,6 +244,14 @@ func (c *Config) validate() error {
 	}
 	return nil
 }
+// ResolveDownloadsDir returns the absolute path to the downloads directory.
+func (c *Config) ResolveDownloadsDir() (string, error) {
+	if filepath.IsAbs(c.Update.DownloadsDir) {
+		return c.Update.DownloadsDir, nil
+	}
+	return filepath.Abs(c.Update.DownloadsDir)
+}
+
 // ResolveDatabasePath returns the absolute path to the database,
 // resolving relative paths relative to the config file's directory.
 func (c *Config) ResolveDatabasePath() (string, error) {

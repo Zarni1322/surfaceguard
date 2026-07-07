@@ -1,6 +1,6 @@
 package database
 
-const schemaVersion = 3
+const schemaVersion = 4
 
 // schema holds all CREATE TABLE statements. Each migration is a versioned step.
 // Always append new migrations; never modify existing ones.
@@ -8,6 +8,7 @@ var schema = map[int]string{
 	1: schemaV1,
 	2: schemaV2,
 	3: schemaV3,
+	4: schemaV4,
 }
 
 const schemaV1 = `
@@ -180,4 +181,19 @@ CREATE TABLE IF NOT EXISTS update_history (
 );
 CREATE INDEX IF NOT EXISTS idx_update_history_time ON update_history(run_time);
 CREATE INDEX IF NOT EXISTS idx_update_history_feed ON update_history(feed);
+`
+
+const schemaV4 = `
+-- Update checkpoints: tracks fault-tolerant feed update progress
+CREATE TABLE IF NOT EXISTS update_checkpoints (
+    feed_name    TEXT NOT NULL PRIMARY KEY,
+    state        TEXT NOT NULL DEFAULT 'NOT_STARTED',
+    step         TEXT NOT NULL DEFAULT '',
+    bytes_offset INTEGER NOT NULL DEFAULT 0,
+    file_path    TEXT NOT NULL DEFAULT '',
+    file_hash    TEXT NOT NULL DEFAULT '',
+    message      TEXT NOT NULL DEFAULT '',
+    updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
 `

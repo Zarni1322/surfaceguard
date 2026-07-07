@@ -66,3 +66,16 @@ type DBMetadata struct {
 	Key   string `db:"key"`
 	Value string `db:"value"`
 }
+
+// DBCheckpoint represents a row in the update_checkpoints table.
+type DBCheckpoint struct {
+	FeedName    string `db:"feed_name"`
+	State       string `db:"state"`
+	Step        string `db:"step"`
+	BytesOffset int64  `db:"bytes_offset"`
+	FilePath    string `db:"file_path"`
+	FileHash    string `db:"file_hash"`
+	Message     string `db:"message"`
+	UpdatedAt   string `db:"updated_at"`
+	CreatedAt   string `db:"created_at"`
+}

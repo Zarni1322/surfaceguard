@@ -110,6 +110,20 @@ type MetadataRepository interface {
 	List(ctx context.Context) ([]DBMetadata, error)
 }
 
+// CheckpointRepository tracks fault-tolerant update progress.
+type CheckpointRepository interface {
+	// Save persists a checkpoint for a feed (insert or update).
+	Save(ctx context.Context, cp *DBCheckpoint) error
+	// Get returns the checkpoint for a feed, or an error if none exists.
+	Get(ctx context.Context, feedName string) (*DBCheckpoint, error)
+	// List returns all checkpoints.
+	List(ctx context.Context) ([]DBCheckpoint, error)
+	// Delete removes a checkpoint for a feed.
+	Delete(ctx context.Context, feedName string) error
+	// DeleteAll removes all checkpoints.
+	DeleteAll(ctx context.Context) error
+}
+
 // Database is the top-level interface aggregating all repositories.
 type Database interface {
 	// Vendor returns the vendor repository.
@@ -126,6 +140,8 @@ type Database interface {
 	EPSS() EPSSRepository
 	// Metadata returns the metadata repository.
 	Metadata() MetadataRepository
+	// Checkpoint returns the checkpoint repository.
+	Checkpoint() CheckpointRepository
 
 	// Info returns a DatabaseInfo struct with aggregate stats.
 	Info(ctx context.Context) (*models.DatabaseInfo, error)

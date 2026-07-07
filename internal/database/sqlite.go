@@ -36,13 +36,14 @@ var _ Database = (*sqliteDB)(nil)
 type sqliteDB struct {
 	db *sql.DB
 
-	vendorRepo  *sqliteVendorRepo
-	productRepo *sqliteProductRepo
-	cpeRepo     *sqliteCPERepo
-	cveRepo     *sqliteCVERepo
-	kevRepo     *sqliteKEVRepo
-	epssRepo    *sqliteEPSSRepo
-	metaRepo    *sqliteMetadataRepo
+	vendorRepo       *sqliteVendorRepo
+	productRepo      *sqliteProductRepo
+	cpeRepo          *sqliteCPERepo
+	cveRepo          *sqliteCVERepo
+	kevRepo          *sqliteKEVRepo
+	epssRepo         *sqliteEPSSRepo
+	metaRepo         *sqliteMetadataRepo
+	checkpointRepo   *sqliteCheckpointRepo
 
 	mu sync.RWMutex
 }
@@ -81,6 +82,7 @@ func NewSQLiteDatabase(ctx context.Context, path string) (Database, error) {
 	sqlite.kevRepo = &sqliteKEVRepo{db: db}
 	sqlite.epssRepo = &sqliteEPSSRepo{db: db}
 	sqlite.metaRepo = &sqliteMetadataRepo{db: db}
+	sqlite.checkpointRepo = &sqliteCheckpointRepo{db: db}
 
 	// Run migrations.
 	if err := sqlite.migrate(ctx); err != nil {
@@ -131,13 +133,14 @@ func (s *sqliteDB) migrate(ctx context.Context) error {
 // Repository accessors
 // ============================================================================
 
-func (s *sqliteDB) Vendor() VendorRepository     { return s.vendorRepo }
-func (s *sqliteDB) Product() ProductRepository   { return s.productRepo }
-func (s *sqliteDB) CPE() CPERepository           { return s.cpeRepo }
-func (s *sqliteDB) CVE() CVERepository           { return s.cveRepo }
-func (s *sqliteDB) KEV() KEVRepository           { return s.kevRepo }
-func (s *sqliteDB) EPSS() EPSSRepository         { return s.epssRepo }
-func (s *sqliteDB) Metadata() MetadataRepository { return s.metaRepo }
+func (s *sqliteDB) Vendor() VendorRepository         { return s.vendorRepo }
+func (s *sqliteDB) Product() ProductRepository       { return s.productRepo }
+func (s *sqliteDB) CPE() CPERepository               { return s.cpeRepo }
+func (s *sqliteDB) CVE() CVERepository               { return s.cveRepo }
+func (s *sqliteDB) KEV() KEVRepository               { return s.kevRepo }
+func (s *sqliteDB) EPSS() EPSSRepository             { return s.epssRepo }
+func (s *sqliteDB) Metadata() MetadataRepository     { return s.metaRepo }
+func (s *sqliteDB) Checkpoint() CheckpointRepository { return s.checkpointRepo }
 
 // Info returns aggregate database statistics.
 func (s *sqliteDB) Info(ctx context.Context) (*models.DatabaseInfo, error) {
@@ -848,4 +851,68 @@ func ToDomainCVE(dbCVE *DBCVE, dbKEV *DBKEV, dbEpss *DBEpss) models.CVE {
 	}
 
 	return cve
+}
+
+// ============================================================================
+// Checkpoint Repository — fault-tolerant update tracking
+// ============================================================================
+
+type sqliteCheckpointRepo struct{ db *sql.DB }
+
+func (r *sqliteCheckpointRepo) Save(ctx context.Context, cp *DBCheckpoint) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO update_checkpoints (feed_name, state, step, bytes_offset, file_path, file_hash, message, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+		ON CONFLICT(feed_name) DO UPDATE SET
+			state       = excluded.state,
+			step        = excluded.step,
+			bytes_offset = excluded.bytes_offset,
+			file_path   = excluded.file_path,
+			file_hash   = excluded.file_hash,
+			message     = excluded.message,
+			updated_at  = excluded.updated_at
+	`, cp.FeedName, cp.State, cp.Step, cp.BytesOffset, cp.FilePath, cp.FileHash, cp.Message)
+	return err
+}
+
+func (r *sqliteCheckpointRepo) Get(ctx context.Context, feedName string) (*DBCheckpoint, error) {
+	cp := &DBCheckpoint{}
+	err := r.db.QueryRowContext(ctx, `
+		SELECT feed_name, state, step, bytes_offset, file_path, file_hash, message, updated_at, created_at
+		FROM update_checkpoints WHERE feed_name = ?
+	`, feedName).Scan(&cp.FeedName, &cp.State, &cp.Step, &cp.BytesOffset, &cp.FilePath, &cp.FileHash, &cp.Message, &cp.UpdatedAt, &cp.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return cp, nil
+}
+
+func (r *sqliteCheckpointRepo) List(ctx context.Context) ([]DBCheckpoint, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT feed_name, state, step, bytes_offset, file_path, file_hash, message, updated_at, created_at
+		FROM update_checkpoints ORDER BY feed_name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var cps []DBCheckpoint
+	for rows.Next() {
+		var cp DBCheckpoint
+		if err := rows.Scan(&cp.FeedName, &cp.State, &cp.Step, &cp.BytesOffset, &cp.FilePath, &cp.FileHash, &cp.Message, &cp.UpdatedAt, &cp.CreatedAt); err != nil {
+			return nil, err
+		}
+		cps = append(cps, cp)
+	}
+	return cps, rows.Err()
+}
+
+func (r *sqliteCheckpointRepo) Delete(ctx context.Context, feedName string) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM update_checkpoints WHERE feed_name = ?", feedName)
+	return err
+}
+
+func (r *sqliteCheckpointRepo) DeleteAll(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM update_checkpoints")
+	return err
 }
