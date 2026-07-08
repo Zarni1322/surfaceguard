@@ -1388,9 +1388,15 @@ func handleEASMFindingsDetail(w http.ResponseWriter, r *http.Request) {
 	groups := make(map[string]*ag)
 	order := make([]string, 0)
 	for _, e := range enriched {
+		severity := e.Severity
+		if e.CVSSv3 != nil {
+			severity = models.CVSSSeverity(*e.CVSSv3)
+		} else if e.CVSSv2 != nil {
+			severity = models.CVSSSeverity(*e.CVSSv2)
+		}
 		f := models.EASMFinding{
 			ID: e.ID, ServiceID: e.ServiceID, ScanID: e.ScanID, CVEID: e.CVEID,
-			CVSSv3: e.CVSSv3, CVSSv2: e.CVSSv2, Severity: e.Severity, Description: e.Description,
+			CVSSv3: e.CVSSv3, CVSSv2: e.CVSSv2, Severity: severity, Description: e.Description,
 			IsKEV: e.IsKEV == 1, EPSSScore: e.EPSSScore, EPSSPercentile: e.EPSSPercentile,
 			MatchedCPE: e.MatchedCPE, MatchedVersion: e.MatchedVersion,
 		}
@@ -1507,9 +1513,17 @@ func dbEASMAssetToModel(a *database.DBEASMAsset) *models.EASMAsset {
 }
 
 func dbEASMFindingToModel(f *database.DBEASMFinding) *models.EASMFinding {
+	// Re-derive severity from CVSS score — NVD data sometimes stores wrong
+	// labels (e.g. 9.0 as "HIGH" instead of "CRITICAL").
+	severity := f.Severity
+	if f.CVSSv3 != nil {
+		severity = models.CVSSSeverity(*f.CVSSv3)
+	} else if f.CVSSv2 != nil {
+		severity = models.CVSSSeverity(*f.CVSSv2)
+	}
 	return &models.EASMFinding{
 		ID: f.ID, ServiceID: f.ServiceID, ScanID: f.ScanID, CVEID: f.CVEID,
-		CVSSv3: f.CVSSv3, CVSSv2: f.CVSSv2, Severity: f.Severity, Description: f.Description,
+		CVSSv3: f.CVSSv3, CVSSv2: f.CVSSv2, Severity: severity, Description: f.Description,
 		IsKEV: f.IsKEV == 1, EPSSScore: f.EPSSScore, EPSSPercentile: f.EPSSPercentile,
 		MatchedCPE: f.MatchedCPE, MatchedVersion: f.MatchedVersion,
 	}
