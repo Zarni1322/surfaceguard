@@ -6,7 +6,7 @@ import { History, Clock, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import axios from "axios";
 import { formatDate, severityColor } from "@/lib/utils";
-import PageContainer from "@/components/PageContainer";
+import PageContainer, { colSpan } from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 
 export default function ScanHistoryPage() {
@@ -22,6 +22,7 @@ export default function ScanHistoryPage() {
   if (isLoading) {
     return (
       <PageContainer>
+        <div className={colSpan(12)}>
         <h1 className="text-2xl font-bold text-[#F8FAFC]">Scan History</h1>
         <Card className="border-[#1E293B] bg-[#1E293B]">
           <CardContent className="py-20">
@@ -30,6 +31,7 @@ export default function ScanHistoryPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
       </PageContainer>
     );
   }
@@ -37,6 +39,7 @@ export default function ScanHistoryPage() {
   if (error) {
     return (
       <PageContainer>
+        <div className={colSpan(12)}>
         <PageHeader title="Scan History" />
         <Card className="border-[#EF4444]/30 bg-[#1E293B]">
           <CardContent className="pt-6">
@@ -46,6 +49,7 @@ export default function ScanHistoryPage() {
             </Button>
           </CardContent>
         </Card>
+        </div>
       </PageContainer>
     );
   }
@@ -54,6 +58,7 @@ export default function ScanHistoryPage() {
 
   return (
     <PageContainer>
+      <div className={colSpan(12)}>
       <PageHeader title="Scan History" description={records.length > 0 ? `${records.length} scan(s) recorded` : "No scans recorded yet"}
         actions={records.length > 0 ? <Button
             variant="outline"
@@ -126,6 +131,7 @@ export default function ScanHistoryPage() {
           </CardContent>
         </Card>
       )}
+      </div>
     </PageContainer>
   );
 }

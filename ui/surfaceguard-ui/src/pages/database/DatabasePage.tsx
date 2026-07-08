@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useDbInfo } from "@/hooks/useApi";
 import { formatDate } from "@/lib/utils";
 import { Database, RefreshCw, Shield, Trash2 } from "lucide-react";
-import PageContainer from "@/components/PageContainer";
+import PageContainer, { colSpan } from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 
 export default function DatabasePage() {
@@ -14,8 +14,11 @@ export default function DatabasePage() {
 
   return (
     <PageContainer>
+      <div className={colSpan(12)}>
       <PageHeader title="Database" description="Vulnerability database management" />
+      </div>
 
+      <div className={colSpan(12)}>
       <div className="grid gap-3 grid-cols-1 lg:grid-cols-2">
         <Card className="border-[#1E293B] bg-[#1E293B]">
           <CardHeader>
@@ -61,6 +64,7 @@ export default function DatabasePage() {
             <ActionItem icon={Trash2} label="Clear Findings" desc="Remove old scan data" />
           </CardContent>
         </Card>
+      </div>
       </div>
     </PageContainer>
   );

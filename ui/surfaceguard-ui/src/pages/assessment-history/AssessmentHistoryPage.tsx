@@ -5,7 +5,7 @@ import { ClipboardCheck, ExternalLink, ChevronDown, ChevronUp, Trash2 } from "lu
 import { getAssessmentHistory, deleteAssessmentHistory } from "@/api/client";
 import type { AssessmentResult } from "@/types";
 import { toast } from "sonner";
-import PageContainer from "@/components/PageContainer";
+import PageContainer, { colSpan } from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 
 export default function AssessmentHistoryPage() {
@@ -54,9 +54,12 @@ export default function AssessmentHistoryPage() {
 
   return (
     <PageContainer>
+      <div className={colSpan(12)}>
       <PageHeader title="Assessment History" description="Past authenticated assessment scans"
         actions={results.length > 0 ? <Button onClick={handleReset} disabled={resetting} variant="outline" size="sm" className="border-red-500/30 text-red-400 hover:bg-red-500/10"><Trash2 className="h-4 w-4 mr-1" />{resetting ? "Resetting..." : "Reset"}</Button> : undefined} />
+      </div>
 
+      <div className={colSpan(12)}>
       {loading ? (
         <p className="text-[#94A3B8]">Loading...</p>
       ) : results.length === 0 ? (
@@ -150,6 +153,7 @@ export default function AssessmentHistoryPage() {
           ))}
         </div>
       )}
+      </div>
     </PageContainer>
   );
 }

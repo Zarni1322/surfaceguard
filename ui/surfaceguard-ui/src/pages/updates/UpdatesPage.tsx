@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { RefreshCw, Loader2, Database, CheckCircle2, AlertCircle } from "lucide-react";
 import { useDbInfo } from "@/hooks/useApi";
 import { formatDate } from "@/lib/utils";
-import PageContainer from "@/components/PageContainer";
+import PageContainer, { colSpan } from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 
 // Module-level ref that survives page navigation
@@ -67,6 +67,7 @@ export default function UpdatesPage() {
 
   return (
     <PageContainer>
+      <div className={colSpan(12)}>
       <PageHeader title="Update Center" description="Manage vulnerability feed updates"
         actions={<Button
           onClick={handleUpdate}
@@ -80,7 +81,9 @@ export default function UpdatesPage() {
           )}
           {updating ? "Updating..." : "Update All Feeds"}
         </Button>} />
+      </div>
 
+      <div className={colSpan(12)}>
       {/* Real-time Progress Bar */}
       {updating && (
         <Card className="border-[#1E293B] bg-[#1E293B]">
@@ -157,6 +160,7 @@ export default function UpdatesPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </PageContainer>
   );
 }

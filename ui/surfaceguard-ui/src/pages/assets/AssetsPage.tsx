@@ -5,7 +5,7 @@ import { listAssets } from "@/api/client";
 import type { AssetDetail } from "@/types";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import PageContainer from "@/components/PageContainer";
+import PageContainer, { colSpan } from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 
 export default function AssetsPage() {
@@ -38,8 +38,11 @@ export default function AssetsPage() {
 
   return (
     <PageContainer>
-      <PageHeader title="Asset Inventory" description="Discovered assets from authenticated assessments" />
+      <div className={colSpan(12)}>
+        <PageHeader title="Asset Inventory" description="Discovered assets from authenticated assessments" />
+      </div>
 
+      <div className={colSpan(12)}>
       {loading ? (
         <p className="text-[#94A3B8]">Loading...</p>
       ) : assets.length === 0 ? (
@@ -82,6 +85,7 @@ export default function AssetsPage() {
           </table>
         </div>
       )}
+      </div>
     </PageContainer>
   );
 }

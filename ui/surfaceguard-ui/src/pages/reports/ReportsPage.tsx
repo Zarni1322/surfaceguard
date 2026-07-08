@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import PageContainer from "@/components/PageContainer";
+import PageContainer, { colSpan } from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 import {
   FileText,
@@ -74,8 +74,11 @@ export default function ReportsPage() {
 
   return (
     <PageContainer>
+      <div className={colSpan(12)}>
       <PageHeader title="Reports" description="Generate and download vulnerability assessment reports" />
+      </div>
 
+      <div className={colSpan(12)}>
       {/* Target Input */}
       <Card className="border-[#1E293B] bg-[#1E293B]">
         <CardContent className="pt-6">
@@ -196,6 +199,7 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
       )}
+      </div>
     </PageContainer>
   );
 }

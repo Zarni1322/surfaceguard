@@ -7,7 +7,7 @@ import { listEASMScans, getEASMAssets, getEASMFindings } from "@/api/client";
 import type { EASMScan, EASMAsset, EASMFinding } from "@/types";
 import { toast } from "sonner";
 import SeverityBadge from "@/components/SeverityBadge";
-import PageContainer from "@/components/PageContainer";
+import PageContainer, { colSpan } from "@/components/PageContainer";
 
 function estimateProgress(scan: EASMScan): number {
   if (scan.status === "completed") return 100;
@@ -84,6 +84,7 @@ export default function EASMScanDetail() {
 
   return (
     <PageContainer>
+      <div className={colSpan(12)}>
       <div className="space-y-3">
       <div className="flex items-center gap-3 mb-2">
         <Button variant="ghost" size="sm" onClick={() => navigate("/easm")} className="text-[#94A3B8] p-0"><ArrowLeft className="h-4 w-4" /></Button>
@@ -233,6 +234,7 @@ export default function EASMScanDetail() {
           </CardContent>
         </Card>
       )}
+    </div>
     </div>
     </PageContainer>
   );

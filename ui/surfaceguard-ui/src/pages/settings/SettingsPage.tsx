@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import axios from "axios";
-import PageContainer from "@/components/PageContainer";
+import PageContainer, { colSpan } from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 import {
   Settings,
@@ -100,12 +100,15 @@ export default function SettingsPage() {
 
   return (
     <PageContainer>
+      <div className={colSpan(12)}>
       <PageHeader title="Settings" description="System configuration"
         actions={<div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleReset} className="border-[#0B1220] text-[#94A3B8]"><RotateCcw className="h-4 w-4 mr-2" />Reset</Button>
           <Button onClick={handleSave} size="sm" className="bg-[#3B82F6] hover:bg-[#2563EB] text-white"><Save className="h-4 w-4 mr-2" />Save Settings</Button>
         </div>} />
+      </div>
 
+      <div className={colSpan(12)}>
       <div className="grid gap-3 grid-cols-1 lg:grid-cols-2">
         {/* System Information */}
         <Card className="border-[#1E293B] bg-[#1E293B] lg:col-span-2">
@@ -239,6 +242,7 @@ export default function SettingsPage() {
             <p>Build: {sysInfo?.build_date || "—"}</p>
           </CardContent>
         </Card>
+      </div>
       </div>
     </PageContainer>
   );
