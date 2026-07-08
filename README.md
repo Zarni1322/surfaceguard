@@ -38,6 +38,7 @@ SurfaceGuard is a production-grade infrastructure vulnerability scanner built wi
 
 ```bash
 ./install.sh
+./main.sh start
 ```
 
 Then open **http://localhost:3000** in your browser.
