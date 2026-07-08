@@ -170,7 +170,7 @@ export async function listEASMScans(): Promise<EASMScan[]> {
 }
 
 export async function createEASMScan(req: any): Promise<any> {
-  const { data } = await api.post("/easm/scan", req);
+  const { data } = await apiLong.post("/easm/scan", req);
   return data;
 }
 

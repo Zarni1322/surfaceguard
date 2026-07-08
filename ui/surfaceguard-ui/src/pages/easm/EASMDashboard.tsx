@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,8 +24,13 @@ export default function EASMDashboard() {
     ports: "fast" as string,
     workers: 50,
   });
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => { loadScans(); }, []);
+  useEffect(() => {
+    loadScans();
+    pollRef.current = setInterval(() => { listEASMScans().then(setScans).catch(() => {}); }, 5000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
 
   async function loadScans() {
     try { setScans(await listEASMScans()); } catch { /* ignore */ } finally { setLoading(false); }
@@ -47,7 +52,10 @@ export default function EASMDashboard() {
       setShowForm(false);
       loadScans();
       if (res.scan_id) navigate(`/easm/${res.scan_id}`);
-    } catch { toast.error("Failed to create scan"); } finally { setScanning(false); }
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.message || "Request timed out. Check scan history for results.";
+      toast.error(msg);
+    } finally { setScanning(false); }
   }
 
   function statusColor(status: string) {
@@ -74,7 +82,7 @@ export default function EASMDashboard() {
         <PageHeader title="External Attack Surface" description="Discover and assess externally exposed assets"
           actions={
             <Button onClick={() => setShowForm(!showForm)} size="sm" className="bg-[#3B82F6]">
-              <Globe className="h-4 w-4 mr-1" />New Scan
+              <Globe className="h-4 w-4 mr-1" />EASM Scan
             </Button>
           } />
       </div>
@@ -82,7 +90,7 @@ export default function EASMDashboard() {
       {showForm && (
         <div className={colSpan(12)}>
           <Card className="border-[#1E293B] bg-[#1E293B]">
-            <CardHeader className="pb-3"><CardTitle className="text-base text-[#F8FAFC]">New EASM Scan</CardTitle></CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base text-[#F8FAFC]">EASM Scan</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="md:col-span-2">
@@ -127,6 +135,28 @@ export default function EASMDashboard() {
                 {scanning ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Activity className="h-4 w-4 mr-1" />}
                 {scanning ? "Starting..." : "Start Scan"}
               </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Scanning progress indicator */}
+      {scanning && (
+        <div className={colSpan(12)}>
+          <Card className="border-[#1E293B] bg-[#1E293B]">
+            <CardContent className="p-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#3B82F6]" />
+                    <span className="text-[#F8FAFC] font-medium">Scanning {form.target}...</span>
+                  </div>
+                </div>
+                <div className="w-full bg-[#0B1220] rounded-full h-2 overflow-hidden">
+                  <div className="h-full rounded-full animate-pulse bg-gradient-to-r from-[#3B82F6] to-[#8B5CF6]" style={{ width: "60%" }} />
+                </div>
+                <p className="text-xs text-[#94A3B8]">Running discovery, port scan, and CVE correlation. This may take a few minutes.</p>
+              </div>
             </CardContent>
           </Card>
         </div>

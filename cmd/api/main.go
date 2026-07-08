@@ -1120,8 +1120,9 @@ func handleEASMScan(w http.ResponseWriter, r *http.Request) {
 		err    error
 	}
 	resultCh := make(chan scanResult, 1)
+	bgCtx := context.Background()
 	go func() {
-		res, err := orch.Run(ctx, req, nil)
+		res, err := orch.Run(bgCtx, req, nil)
 		resultCh <- scanResult{result: res, err: err}
 	}()
 
@@ -1132,6 +1133,14 @@ func handleEASMScan(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, map[string]interface{}{"status": "completed", "scan_id": sr.result.ScanID, "scan": sr.result.Scan})
+	case <-time.After(30 * time.Second):
+		writeJSON(w, map[string]interface{}{
+			"status": "running", "scan_id": 0,
+			"scan": map[string]interface{}{
+				"target": req.Target, "scan_type": req.ScanType,
+				"status": "running", "total_assets": 0,
+			},
+		})
 	case <-ctx.Done():
 		writeJSON(w, map[string]interface{}{"status": "failed", "error": "request cancelled"})
 	}
