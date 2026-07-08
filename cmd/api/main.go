@@ -299,24 +299,31 @@ func main() {
 		cmd.Stderr = cmd.Stdout
 		cmd.Start()
 
+		// Use a custom scanner that splits on both \n and \r to get real-time progress.
 		scanner := bufio.NewScanner(stdout)
+		scanner.Split(scanLinesOrCarriageReturn)
 		for scanner.Scan() {
 			line := scanner.Text()
-			// Parse progress from CVE download line
-			if strings.Contains(line, "CVE Download:") {
-				// Extract percentage: [===> ] 45%
+			// NVD progress: "  NVD: [=> ] 2% (page 76/3639, 521 inserted)"
+			if strings.Contains(line, "NVD:") && strings.Contains(line, "%") {
 				pct := 10
 				text := "Downloading CVEs..."
-				// Try to parse "XX%"
 				if idx := strings.Index(line, "%"); idx >= 2 {
-					pctStr := ""
-					for j := idx - 3; j < idx; j++ {
-						if j >= 0 && line[j] >= '0' && line[j] <= '9' {
-							pctStr += string(line[j])
+					end := idx
+					start := end
+					for start > 0 && line[start-1] >= '0' && line[start-1] <= '9' {
+						start--
+					}
+					if start < end {
+						if p, err := strconv.Atoi(strings.TrimSpace(line[start:end])); err == nil && p > 0 {
+							pct = p
 						}
 					}
-					if p, err := strconv.Atoi(pctStr); err == nil && p > 0 {
-						pct = p
+				}
+				if pIdx := strings.Index(line, "page "); pIdx >= 0 {
+					if endIdx := strings.Index(line[pIdx:], "/"); endIdx >= 0 {
+						pageNum := strings.TrimSpace(line[pIdx+5 : pIdx+endIdx])
+						text = "Downloading CVEs... (page " + pageNum + ")"
 					}
 				}
 				if pct > 95 {
@@ -330,8 +337,11 @@ func main() {
 			} else if strings.Contains(line, "EPSS") && strings.Contains(line, "inserted") {
 				fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "progress", "percent": 98, "text": "EPSS scores downloaded"}))
 				flusher.Flush()
-			} else if strings.Contains(line, "inserted") {
-				fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "progress", "percent": 90, "text": line}))
+			} else if strings.Contains(line, "NVD: Import complete") {
+				fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "progress", "percent": 95, "text": line}))
+				flusher.Flush()
+			} else if strings.Contains(line, "Updating SQLite") {
+				fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "progress", "percent": 98, "text": "Processing database..."}))
 				flusher.Flush()
 			}
 		}
@@ -813,6 +823,23 @@ func runSurfaceGuard(args ...string) (string, error) {
 		return "", fmt.Errorf("%s: %s", err, string(output))
 	}
 	return string(output), nil
+}
+
+// scanLinesOrCarriageReturn is a bufio.SplitFunc that splits on both \n and \r.
+// Required to read real-time NVD download progress (uses \r for in-place updates).
+func scanLinesOrCarriageReturn(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	for i := 0; i < len(data); i++ {
+		if data[i] == '\n' || data[i] == '\r' {
+			return i + 1, data[:i], nil
+		}
+	}
+	if atEOF {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
 }
 
 func openDB(cfg *config.Config, ctx context.Context, w http.ResponseWriter) database.Database {
