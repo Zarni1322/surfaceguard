@@ -1065,8 +1065,11 @@ func corsMiddleware(next http.Handler) http.Handler {
 // ============================================================================
 
 var easmOrchestrator *easm.Orchestrator
+var easmOrchestratorMu sync.Mutex
 
 func initEASMEngine(cfg *config.Config, ctx context.Context) *easm.Orchestrator {
+	easmOrchestratorMu.Lock()
+	defer easmOrchestratorMu.Unlock()
 	if easmOrchestrator != nil {
 		return easmOrchestrator
 	}

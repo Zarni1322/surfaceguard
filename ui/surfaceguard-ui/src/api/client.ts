@@ -8,6 +8,9 @@ import type {
   AssessmentResult,
   AssetDetail,
   ScanProgress,
+  EASMScan,
+  EASMAsset,
+  EASMFinding,
 } from "@/types";
 
 const api = axios.create({
@@ -154,6 +157,30 @@ export async function listAssets(): Promise<AssetDetail[]> {
 
 export async function getAssetDetail(id: number): Promise<AssetDetail> {
   const { data } = await api.get<AssetDetail>("/asset", { params: { id } });
+  return data;
+}
+
+// ==========================================================================
+// EASM API
+// ==========================================================================
+
+export async function listEASMScans(): Promise<EASMScan[]> {
+  const { data } = await api.get<EASMScan[]>("/easm/scans");
+  return data;
+}
+
+export async function createEASMScan(req: any): Promise<any> {
+  const { data } = await api.post("/easm/scan", req);
+  return data;
+}
+
+export async function getEASMAssets(scanId: number): Promise<EASMAsset[]> {
+  const { data } = await api.get<EASMAsset[]>("/easm/assets", { params: { scan_id: scanId } });
+  return data;
+}
+
+export async function getEASMFindings(scanId: number): Promise<EASMFinding[]> {
+  const { data } = await api.get<EASMFinding[]>("/easm/findings", { params: { scan_id: scanId } });
   return data;
 }
 

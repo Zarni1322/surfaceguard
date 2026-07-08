@@ -236,3 +236,75 @@ export interface AssetDetail {
   packages?: InstalledPackage[];
   software?: InstalledSoftware[];
 }
+
+// ============================================================================
+// EASM Types
+// ============================================================================
+
+export interface EASMScan {
+  id: number;
+  target: string;
+  scan_type: string;
+  wordlist: string;
+  ports: string;
+  started_at: string;
+  completed_at: string | null;
+  duration: string;
+  status: string;
+  total_assets: number;
+  alive_assets: number;
+  total_services: number;
+  total_cves: number;
+  critical_cves: number;
+  high_cves: number;
+  medium_cves: number;
+  low_cves: number;
+  kev_cves: number;
+  avg_epss: number;
+  error?: string;
+}
+
+export interface EASMAsset {
+  id: number;
+  scan_id: number;
+  hostname: string;
+  ip_address: string;
+  ipv6_address?: string;
+  cname?: string;
+  is_alive: boolean;
+  is_wildcard: boolean;
+  source: string;
+  asset_type: string;
+  discovered_at?: string;
+}
+
+export interface EASMService {
+  id: number;
+  asset_id: number;
+  hostname?: string;
+  port: number;
+  protocol: string;
+  service: string;
+  product: string;
+  version: string;
+  banner: string;
+  confidence: number;
+  technology: string;
+  cpe_2_3_uri: string;
+}
+
+export interface EASMFinding {
+  id: number;
+  service_id: number;
+  scan_id: number;
+  cve_id: string;
+  cvss_v3: number | null;
+  cvss_v2: number | null;
+  severity: string;
+  description: string;
+  is_kev: boolean;
+  epss_score: number | null;
+  epss_percentile: number | null;
+  matched_cpe: string;
+  matched_version: string;
+}

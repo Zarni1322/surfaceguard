@@ -9,6 +9,8 @@ import CredentialsPage from "@/pages/credentials/CredentialsPage";
 import AssessmentPage from "@/pages/assessment/AssessmentPage";
 import AssetsPage from "@/pages/assets/AssetsPage";
 import AssessmentHistoryPage from "@/pages/assessment-history/AssessmentHistoryPage";
+import EASMDashboard from "@/pages/easm/EASMDashboard";
+import EASMScanDetail from "@/pages/easm/EASMScanDetail";
 import ScanHistoryPage from "@/pages/scan-history/ScanHistoryPage";
 import ReportsPage from "@/pages/reports/ReportsPage";
 import UpdatesPage from "@/pages/updates/UpdatesPage";
@@ -37,6 +39,8 @@ export default function App() {
             <Route path="/assessment" element={<AssessmentPage />} />
             <Route path="/assets" element={<AssetsPage />} />
             <Route path="/assessment-history" element={<AssessmentHistoryPage />} />
+            <Route path="/easm" element={<EASMDashboard />} />
+            <Route path="/easm/:id" element={<EASMScanDetail />} />
             <Route path="/scan-history" element={<ScanHistoryPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/updates" element={<UpdatesPage />} />
