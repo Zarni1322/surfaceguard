@@ -60,8 +60,7 @@ export default function ScanHistoryPage() {
             size="sm"
             className="border-[#0B1220] text-[#94A3B8]"
             onClick={() => {
-              localStorage.removeItem("scan-history");
-              refetch();
+              axios.delete("/api/scan-history").then(() => refetch()).catch(() => {});
             }}
           >
             <Trash2 className="h-4 w-4 mr-2" /> Clear

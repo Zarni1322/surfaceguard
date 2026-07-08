@@ -262,6 +262,13 @@ func main() {
 
 	// Scan History
 	mux.HandleFunc("/api/scan-history", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "DELETE" {
+			historyMu.Lock()
+			scanHistory = nil
+			historyMu.Unlock()
+			writeJSON(w, map[string]string{"status": "ok"})
+			return
+		}
 		historyMu.Lock()
 		defer historyMu.Unlock()
 		if scanHistory == nil {
