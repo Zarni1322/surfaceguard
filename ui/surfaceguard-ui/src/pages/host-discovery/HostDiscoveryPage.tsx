@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Monitor, Wifi, Play, Loader2, Download, Globe } from "lucide-react";
+import { Monitor, Wifi, Play, Loader2, Download, Globe, Trash2 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import PageContainer, { colSpan } from "@/components/PageContainer";
 import EmptyState from "@/components/EmptyState";
@@ -101,6 +101,11 @@ export default function HostDiscoveryPage() {
           <Card className="border-[#1E293B] bg-[#1E293B]">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle className="text-base text-[#F8FAFC]">Live Hosts ({hosts.length})</CardTitle>
+              <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="border-red-500/30 text-red-400 hover:bg-red-500/10 h-8"
+                onClick={() => { upd({ hosts: [], progress: 0, progressText: "" }); }}>
+                <Trash2 className="h-3 w-3 mr-1" /> Clear
+              </Button>
               <Button variant="outline" size="sm" className="border-[#0B1220] text-[#94A3B8] h-8"
                 onClick={() => {
                   const text = hosts.join("\n");
@@ -115,6 +120,7 @@ export default function HostDiscoveryPage() {
                 }}>
                 <Download className="h-3 w-3 mr-1" /> Export
               </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">

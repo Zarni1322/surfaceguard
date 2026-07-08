@@ -870,6 +870,19 @@ func (r *sqliteMetadataRepo) List(ctx context.Context) ([]DBMetadata, error) {
 // Helper: Convert DBCVE + KEV + EPSS to domain model CVE
 // ============================================================================
 
+// deriveSeverity computes the correct severity from the CVSS score.
+// NVD data sometimes stores severities that don't match the CVSS 3.0
+// standard thresholds (e.g. a score of 9.0 stored as "HIGH" instead of "CRITICAL").
+func deriveSeverity(cvssv3, cvssv2 *float64, fallback string) string {
+	if cvssv3 != nil {
+		return models.CVSSSeverity(*cvssv3)
+	}
+	if cvssv2 != nil {
+		return models.CVSSSeverity(*cvssv2)
+	}
+	return fallback
+}
+
 // ToDomainCVE merges a DBCVE, optional DBKEV, and optional DBEpss into a models.CVE.
 func ToDomainCVE(dbCVE *DBCVE, dbKEV *DBKEV, dbEpss *DBEpss) models.CVE {
 	var refs []string
@@ -878,11 +891,13 @@ func ToDomainCVE(dbCVE *DBCVE, dbKEV *DBKEV, dbEpss *DBEpss) models.CVE {
 	}
 
 	cve := models.CVE{
-		ID:               dbCVE.CVEID,
-		Description:      dbCVE.Description,
-		CVSSv2:           dbCVE.CVSSv2,
-		CVSSv3:           dbCVE.CVSSv3,
-		Severity:         dbCVE.Severity,
+		ID:          dbCVE.CVEID,
+		Description: dbCVE.Description,
+		CVSSv2:      dbCVE.CVSSv2,
+		CVSSv3:      dbCVE.CVSSv3,
+		// Re-derive severity from CVSS score — NVD stored severity may
+		// not match the CVSS 3.0 standard thresholds (e.g. 9.0 stored as HIGH).
+		Severity:         deriveSeverity(dbCVE.CVSSv3, dbCVE.CVSSv2, dbCVE.Severity),
 		PublishedDate:    dbCVE.PublishedDate,
 		LastModifiedDate: dbCVE.LastModifiedDate,
 		References:       refs,
