@@ -207,6 +207,67 @@ type CredentialValidationRepository interface {
 	ListByProfile(ctx context.Context, profileID int64, limit int) ([]DBCredentialValidation, error)
 }
 
+// EASMScanRepository manages EASM scan records.
+type EASMScanRepository interface {
+	// Create inserts a new scan record and returns its ID.
+	Create(ctx context.Context, s *DBEASMScan) (int64, error)
+	// Get returns a scan by ID.
+	Get(ctx context.Context, id int64) (*DBEASMScan, error)
+	// UpdateStatus updates the scan status and completion stats.
+	UpdateStatus(ctx context.Context, id int64, status string, completedAt string, durationMs int64, errMsg string) error
+	// UpdateStats updates aggregate counters for a completed scan.
+	UpdateStats(ctx context.Context, id int64, totalAssets, aliveAssets, totalServices, totalCVEs int,
+		criticalCVEs, highCVEs, mediumCVEs, lowCVEs, kevCVEs int, avgEPSS float64) error
+	// List returns all scans, most recent first.
+	List(ctx context.Context, limit int) ([]DBEASMScan, error)
+	// Delete removes a scan and all related data.
+	Delete(ctx context.Context, id int64) error
+}
+
+// EASMAssetRepository manages discovered EASM assets.
+type EASMAssetRepository interface {
+	// Insert adds a new asset.
+	Insert(ctx context.Context, a *DBEASMAsset) (int64, error)
+	// BulkInsert adds multiple assets in a transaction.
+	BulkInsert(ctx context.Context, assets []DBEASMAsset) error
+	// ListByScan returns all assets for a scan.
+	ListByScan(ctx context.Context, scanID int64) ([]DBEASMAsset, error)
+	// CountByScan returns the number of assets for a scan.
+	CountByScan(ctx context.Context, scanID int64) (int, error)
+	// GetByScanAndHost returns an asset by scan ID and hostname.
+	GetByScanAndHost(ctx context.Context, scanID int64, hostname string) (*DBEASMAsset, error)
+}
+
+// EASMServiceRepository manages discovered EASM services.
+type EASMServiceRepository interface {
+	// Insert adds a new service.
+	Insert(ctx context.Context, s *DBEASMService) (int64, error)
+	// BulkInsert adds multiple services in a transaction.
+	BulkInsert(ctx context.Context, services []DBEASMService) error
+	// ListByAsset returns all services for an asset.
+	ListByAsset(ctx context.Context, assetID int64) ([]DBEASMService, error)
+	// ListByScan returns all services for a scan.
+	ListByScan(ctx context.Context, scanID int64) ([]DBEASMService, error)
+	// CountByScan returns the number of services for a scan.
+	CountByScan(ctx context.Context, scanID int64) (int, error)
+}
+
+// EASMFindingRepository manages CVE findings for EASM scans.
+type EASMFindingRepository interface {
+	// Insert adds a new finding.
+	Insert(ctx context.Context, f *DBEASMFinding) (int64, error)
+	// BulkInsert adds multiple findings in a transaction.
+	BulkInsert(ctx context.Context, findings []DBEASMFinding) error
+	// ListByScan returns all findings for a scan.
+	ListByScan(ctx context.Context, scanID int64) ([]DBEASMFinding, error)
+	// ListByService returns all findings for a service.
+	ListByService(ctx context.Context, serviceID int64) ([]DBEASMFinding, error)
+	// CountByScan returns the number of findings for a scan.
+	CountByScan(ctx context.Context, scanID int64) (int, error)
+	// CountBySeverity returns finding counts grouped by severity for a scan.
+	CountBySeverity(ctx context.Context, scanID int64) (map[string]int, error)
+}
+
 // Database is the top-level interface aggregating all repositories.
 type Database interface {
 	// Vendor returns the vendor repository.
@@ -239,6 +300,14 @@ type Database interface {
 	SecurityFinding() SecurityFindingRepository
 	// CredentialValidation returns the credential validation repository.
 	CredentialValidation() CredentialValidationRepository
+	// EASMScan returns the EASM scan repository.
+	EASMScan() EASMScanRepository
+	// EASMAsset returns the EASM asset repository.
+	EASMAsset() EASMAssetRepository
+	// EASMService returns the EASM service repository.
+	EASMService() EASMServiceRepository
+	// EASMFinding returns the EASM finding repository.
+	EASMFinding() EASMFindingRepository
 
 	// Info returns a DatabaseInfo struct with aggregate stats.
 	Info(ctx context.Context) (*models.DatabaseInfo, error)

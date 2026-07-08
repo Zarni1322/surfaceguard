@@ -1,6 +1,6 @@
 package database
 
-const schemaVersion = 5
+const schemaVersion = 6
 
 // schema holds all CREATE TABLE statements. Each migration is a versioned step.
 // Always append new migrations; never modify existing ones.
@@ -10,6 +10,7 @@ var schema = map[int]string{
 	3: schemaV3,
 	4: schemaV4,
 	5: schemaV5,
+	6: schemaV6,
 }
 
 const schemaV1 = `
@@ -292,4 +293,89 @@ CREATE TABLE IF NOT EXISTS credential_validations (
     status      TEXT NOT NULL DEFAULT '',
     tested_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+`
+
+const schemaV6 = `
+-- EASM scans: external attack surface management runs
+CREATE TABLE IF NOT EXISTS easm_scans (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    target          TEXT NOT NULL,
+    scan_type       TEXT NOT NULL DEFAULT 'domain',
+    wordlist        TEXT NOT NULL DEFAULT 'passive',
+    ports           TEXT NOT NULL DEFAULT 'fast',
+    started_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    completed_at    TEXT,
+    duration_ms     INTEGER NOT NULL DEFAULT 0,
+    status          TEXT NOT NULL DEFAULT 'running',
+    total_assets    INTEGER NOT NULL DEFAULT 0,
+    alive_assets    INTEGER NOT NULL DEFAULT 0,
+    total_services  INTEGER NOT NULL DEFAULT 0,
+    total_cves      INTEGER NOT NULL DEFAULT 0,
+    critical_cves   INTEGER NOT NULL DEFAULT 0,
+    high_cves       INTEGER NOT NULL DEFAULT 0,
+    medium_cves     INTEGER NOT NULL DEFAULT 0,
+    low_cves        INTEGER NOT NULL DEFAULT 0,
+    kev_cves        INTEGER NOT NULL DEFAULT 0,
+    avg_epss        REAL NOT NULL DEFAULT 0.0,
+    worker_count    INTEGER NOT NULL DEFAULT 50,
+    scanshots       INTEGER NOT NULL DEFAULT 0,
+    error_message   TEXT NOT NULL DEFAULT '',
+    report_json     TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_easm_scans_status ON easm_scans(status);
+CREATE INDEX IF NOT EXISTS idx_easm_scans_time ON easm_scans(started_at);
+
+-- EASM discovered assets (subdomains, IPs, hosts)
+CREATE TABLE IF NOT EXISTS easm_assets (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_id         INTEGER NOT NULL REFERENCES easm_scans(id),
+    hostname        TEXT NOT NULL,
+    ip_address      TEXT NOT NULL DEFAULT '',
+    ipv6_address    TEXT NOT NULL DEFAULT '',
+    cname           TEXT NOT NULL DEFAULT '',
+    is_alive        INTEGER NOT NULL DEFAULT 0,
+    is_wildcard     INTEGER NOT NULL DEFAULT 0,
+    source          TEXT NOT NULL DEFAULT 'passive',
+    asset_type      TEXT NOT NULL DEFAULT 'subdomain',
+    discovered_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_easm_assets_scan ON easm_assets(scan_id);
+CREATE INDEX IF NOT EXISTS idx_easm_assets_host ON easm_assets(hostname);
+
+-- EASM discovered services (ports on assets)
+CREATE TABLE IF NOT EXISTS easm_services (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id        INTEGER NOT NULL REFERENCES easm_assets(id),
+    port            INTEGER NOT NULL,
+    protocol        TEXT NOT NULL DEFAULT 'tcp',
+    service         TEXT NOT NULL DEFAULT '',
+    product         TEXT NOT NULL DEFAULT '',
+    version         TEXT NOT NULL DEFAULT '',
+    banner          TEXT NOT NULL DEFAULT '',
+    confidence      INTEGER NOT NULL DEFAULT 0,
+    technology      TEXT NOT NULL DEFAULT '',
+    cpe_2_3_uri     TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_easm_services_asset ON easm_services(asset_id);
+CREATE INDEX IF NOT EXISTS idx_easm_services_port ON easm_services(port);
+
+-- EASM findings: CVE references for discovered services
+CREATE TABLE IF NOT EXISTS easm_findings (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_id      INTEGER NOT NULL REFERENCES easm_services(id),
+    scan_id         INTEGER NOT NULL REFERENCES easm_scans(id),
+    cve_id          TEXT NOT NULL,
+    cvss_v3         REAL,
+    cvss_v2         REAL,
+    severity        TEXT NOT NULL DEFAULT 'NONE',
+    description     TEXT NOT NULL DEFAULT '',
+    is_kev          INTEGER NOT NULL DEFAULT 0,
+    epss_score      REAL,
+    epss_percentile REAL,
+    matched_cpe     TEXT NOT NULL DEFAULT '',
+    matched_version TEXT NOT NULL DEFAULT '',
+    UNIQUE(service_id, cve_id)
+);
+CREATE INDEX IF NOT EXISTS idx_easm_findings_scan ON easm_findings(scan_id);
+CREATE INDEX IF NOT EXISTS idx_easm_findings_cve ON easm_findings(cve_id);
 `

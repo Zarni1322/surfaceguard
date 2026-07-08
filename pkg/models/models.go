@@ -13,10 +13,10 @@ import (
 
 // Target represents a scan target — domain, IPv4, or CIDR range.
 type Target struct {
-	Raw     string   // original input (e.g. "example.com", "10.0.0.0/24")
-	Hosts   []string // resolved IP addresses
-	IsCIDR  bool     // true if input was a CIDR range
-	IsIPv4  bool     // true if the raw input is an IPv4 address
+	Raw        string   // original input (e.g. "example.com", "10.0.0.0/24")
+	Hosts      []string // resolved IP addresses
+	IsCIDR     bool     // true if input was a CIDR range
+	IsIPv4     bool     // true if the raw input is an IPv4 address
 	ResolvedAt time.Time
 }
 
@@ -27,10 +27,10 @@ func NewTargetFromDomain(domain string) (*Target, error) {
 		return nil, fmt.Errorf("dns resolution failed for %s: %w", domain, err)
 	}
 	return &Target{
-		Raw:      domain,
-		Hosts:    ips,
-		IsCIDR:   false,
-		IsIPv4:   net.ParseIP(domain) != nil && strings.ContainsRune(domain, '.'),
+		Raw:        domain,
+		Hosts:      ips,
+		IsCIDR:     false,
+		IsIPv4:     net.ParseIP(domain) != nil && strings.ContainsRune(domain, '.'),
 		ResolvedAt: time.Now(),
 	}, nil
 }
@@ -42,10 +42,10 @@ func NewTargetFromIP(ip string) (*Target, error) {
 		return nil, fmt.Errorf("invalid IP address: %s", ip)
 	}
 	return &Target{
-		Raw:      ip,
-		Hosts:    []string{ip},
-		IsCIDR:   false,
-		IsIPv4:   strings.ContainsRune(ip, '.'),
+		Raw:        ip,
+		Hosts:      []string{ip},
+		IsCIDR:     false,
+		IsIPv4:     strings.ContainsRune(ip, '.'),
 		ResolvedAt: time.Now(),
 	}, nil
 }
@@ -53,29 +53,29 @@ func NewTargetFromIP(ip string) (*Target, error) {
 // Port represents an open TCP port with detected service information.
 type Port struct {
 	Port       int    `json:"port"`
-	Protocol   string `json:"protocol"`    // "tcp"
-	Service    string `json:"service"`     // detected service name (e.g. "http", "ssh")
-	Product    string `json:"product"`     // product name (e.g. "Apache httpd")
-	Version    string `json:"version"`     // detected version string
-	Banner     string `json:"banner"`      // raw banner text
-	CPEs       []CPE  `json:"cpes"`        // matched CPEs
-	State      string `json:"state"`       // "open", "filtered"
-	Confidence int    `json:"confidence"`  // 0-100 fingerprinting confidence
+	Protocol   string `json:"protocol"`   // "tcp"
+	Service    string `json:"service"`    // detected service name (e.g. "http", "ssh")
+	Product    string `json:"product"`    // product name (e.g. "Apache httpd")
+	Version    string `json:"version"`    // detected version string
+	Banner     string `json:"banner"`     // raw banner text
+	CPEs       []CPE  `json:"cpes"`       // matched CPEs
+	State      string `json:"state"`      // "open", "filtered"
+	Confidence int    `json:"confidence"` // 0-100 fingerprinting confidence
 }
 
 // CPE represents a Common Platform Enumeration entry (CPE 2.3 format).
 type CPE struct {
-	Part         string `json:"part"`          // a=application, o=os, h=hardware
-	Vendor       string `json:"vendor"`
-	Product      string `json:"product"`
-	Version      string `json:"version"`
-	Update       string `json:"update"`
-	Edition      string `json:"edition"`
-	Language     string `json:"language"`
-	TargetSW     string `json:"target_sw"`
-	TargetHW     string `json:"target_hw"`
-	Other        string `json:"other"`
-	CPE23URI     string `json:"cpe_2_3_uri"`    // full CPE 2.3 URI string
+	Part     string `json:"part"` // a=application, o=os, h=hardware
+	Vendor   string `json:"vendor"`
+	Product  string `json:"product"`
+	Version  string `json:"version"`
+	Update   string `json:"update"`
+	Edition  string `json:"edition"`
+	Language string `json:"language"`
+	TargetSW string `json:"target_sw"`
+	TargetHW string `json:"target_hw"`
+	Other    string `json:"other"`
+	CPE23URI string `json:"cpe_2_3_uri"` // full CPE 2.3 URI string
 }
 
 // String returns the CPE 2.3 formatted URI.
@@ -96,19 +96,19 @@ func wildcard(s string) string {
 
 // CVE represents a Common Vulnerabilities and Exposures entry.
 type CVE struct {
-	ID               string    `json:"id"`
-	Description      string    `json:"description"`
-	CVSSv2           *float64  `json:"cvss_v2,omitempty"`
-	CVSSv3           *float64  `json:"cvss_v3,omitempty"`
-	Severity         string    `json:"severity"` // NONE, LOW, MEDIUM, HIGH, CRITICAL
-	PublishedDate    time.Time `json:"published_date"`
-	LastModifiedDate time.Time `json:"last_modified_date"`
-	References       []string  `json:"references"`
-	CPE23URI         string    `json:"cpe_2_3_uri,omitempty"`
-	IsInKEV          bool      `json:"is_in_kev"`
+	ID               string     `json:"id"`
+	Description      string     `json:"description"`
+	CVSSv2           *float64   `json:"cvss_v2,omitempty"`
+	CVSSv3           *float64   `json:"cvss_v3,omitempty"`
+	Severity         string     `json:"severity"` // NONE, LOW, MEDIUM, HIGH, CRITICAL
+	PublishedDate    time.Time  `json:"published_date"`
+	LastModifiedDate time.Time  `json:"last_modified_date"`
+	References       []string   `json:"references"`
+	CPE23URI         string     `json:"cpe_2_3_uri,omitempty"`
+	IsInKEV          bool       `json:"is_in_kev"`
 	KEVDueDate       *time.Time `json:"kev_due_date,omitempty"`
-	EPSSScore        *float64 `json:"epss_score,omitempty"`
-	EPSSPercentile   *float64 `json:"epss_percentile,omitempty"`
+	EPSSScore        *float64   `json:"epss_score,omitempty"`
+	EPSSPercentile   *float64   `json:"epss_percentile,omitempty"`
 }
 
 // CVSSSeverity returns a human-readable severity label from a CVSSv3 score.
@@ -129,23 +129,23 @@ func CVSSSeverity(score float64) string {
 
 // Finding represents a complete vulnerability finding for a single service.
 type Finding struct {
-	Host        string   `json:"host"`
-	IP          string   `json:"ip"`
-	Port        Port     `json:"port"`
-	CVE         CVE      `json:"cve"`
-	MatchedCPE  CPE      `json:"matched_cpe"`
+	Host       string `json:"host"`
+	IP         string `json:"ip"`
+	Port       Port   `json:"port"`
+	CVE        CVE    `json:"cve"`
+	MatchedCPE CPE    `json:"matched_cpe"`
 }
 
 // ScanResult holds the complete output of a scan session.
 type ScanResult struct {
-	Target      Target            `json:"target"`
-	StartedAt   time.Time         `json:"started_at"`
-	Duration    time.Duration     `json:"duration"`
-	OpenPorts   []Port            `json:"open_ports"`
-	Findings    []Finding         `json:"findings"`
-	TLSInfo     *TLSResult        `json:"tls_info,omitempty"`
-	RiskScore   float64           `json:"risk_score"`
-	Errors      []string          `json:"errors,omitempty"`
+	Target    Target        `json:"target"`
+	StartedAt time.Time     `json:"started_at"`
+	Duration  time.Duration `json:"duration"`
+	OpenPorts []Port        `json:"open_ports"`
+	Findings  []Finding     `json:"findings"`
+	TLSInfo   *TLSResult    `json:"tls_info,omitempty"`
+	RiskScore float64       `json:"risk_score"`
+	Errors    []string      `json:"errors,omitempty"`
 }
 
 // Summary returns a high-level summary string.
@@ -161,15 +161,15 @@ func (r *ScanResult) Summary() string {
 
 // ScanOptions configures the scanner behaviour.
 type ScanOptions struct {
-	Ports           []int    // specific ports (default: top 1000)
-	PortRange       string   // "1-65535" or "80,443,8080"
-	Workers         int      // concurrent port scan workers (default: 100)
+	Ports           []int         // specific ports (default: top 1000)
+	PortRange       string        // "1-65535" or "80,443,8080"
+	Workers         int           // concurrent port scan workers (default: 100)
 	Timeout         time.Duration // connection timeout (default: 3s)
-	BannerSize      int      // max banner bytes to read (default: 2048)
-	FingerprintHTTP bool     // perform HTTP fingerprinting on port 80/443
-	CVSSThreshold   float64  // minimum CVSSv3 score to report (default: 0)
-	OutputFormat    string   // "console", "json", "html"
-	OutputFile      string   // write report to file (optional)
+	BannerSize      int           // max banner bytes to read (default: 2048)
+	FingerprintHTTP bool          // perform HTTP fingerprinting on port 80/443
+	CVSSThreshold   float64       // minimum CVSSv3 score to report (default: 0)
+	OutputFormat    string        // "console", "json", "html"
+	OutputFile      string        // write report to file (optional)
 }
 
 // DefaultScanOptions returns sensible defaults.
@@ -198,28 +198,28 @@ func (r ScanResult) MarshalJSON() ([]byte, error) {
 
 // TLSResult holds TLS certificate analysis for a target.
 type TLSResult struct {
-	Host             string   `json:"host"`
-	Port             int      `json:"port"`
-	Version          string   `json:"version"`
-	CertificateCN    string   `json:"certificate_cn"`
-	CertificateIssuer string  `json:"certificate_issuer"`
+	Host              string    `json:"host"`
+	Port              int       `json:"port"`
+	Version           string    `json:"version"`
+	CertificateCN     string    `json:"certificate_cn"`
+	CertificateIssuer string    `json:"certificate_issuer"`
 	CertificateExpiry time.Time `json:"certificate_expiry"`
-	DaysUntilExpiry  int      `json:"days_until_expiry"`
-	SelfSigned       bool     `json:"self_signed"`
-	WeakCipher       bool     `json:"weak_cipher"`
-	DeprecatedProto  bool     `json:"deprecated_protocol"`
-	SANs             []string `json:"sans,omitempty"`
+	DaysUntilExpiry   int       `json:"days_until_expiry"`
+	SelfSigned        bool      `json:"self_signed"`
+	WeakCipher        bool      `json:"weak_cipher"`
+	DeprecatedProto   bool      `json:"deprecated_protocol"`
+	SANs              []string  `json:"sans,omitempty"`
 }
 
 // InfraCheck represents a single infrastructure security check result.
 type InfraCheck struct {
-	CheckID      string `json:"check_id"`
-	Name         string `json:"name"`
-	Severity     string `json:"severity"`
-	Status       string `json:"status"` // pass, warn, fail
-	Evidence     string `json:"evidence,omitempty"`
-	Port         int    `json:"port,omitempty"`
-	Service      string `json:"service,omitempty"`
+	CheckID  string `json:"check_id"`
+	Name     string `json:"name"`
+	Severity string `json:"severity"`
+	Status   string `json:"status"` // pass, warn, fail
+	Evidence string `json:"evidence,omitempty"`
+	Port     int    `json:"port,omitempty"`
+	Service  string `json:"service,omitempty"`
 }
 
 // RiskScore calculates a weighted risk score from findings.
@@ -290,24 +290,24 @@ const (
 // CredentialProfile holds reusable credentials for authenticated scanning.
 // Secrets are always encrypted at rest (AES-GCM) and never logged.
 type CredentialProfile struct {
-	ID          int64     `json:"id"`
-	Name        string    `json:"name"`
-	Protocol    Protocol  `json:"protocol"`
-	Host        string    `json:"host"`
-	Port        int       `json:"port"`
-	Username    string    `json:"username,omitempty"`
-	AuthMethod  string    `json:"auth_method"` // password, key, key+passphrase, community, snmpv3
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID         int64     `json:"id"`
+	Name       string    `json:"name"`
+	Protocol   Protocol  `json:"protocol"`
+	Host       string    `json:"host"`
+	Port       int       `json:"port"`
+	Username   string    `json:"username,omitempty"`
+	AuthMethod string    `json:"auth_method"` // password, key, key+passphrase, community, snmpv3
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // ValidationResult holds the outcome of a credential validation (test connection).
 type ValidationResult struct {
-	Status      string              `json:"status"` // SUCCESS, WARNING, FAILED
-	Checks      []ValidationCheck   `json:"checks"`
-	TestedAt    time.Time           `json:"tested_at"`
-	ProfileID   int64               `json:"profile_id"`
-	Target      string              `json:"target"`
+	Status    string            `json:"status"` // SUCCESS, WARNING, FAILED
+	Checks    []ValidationCheck `json:"checks"`
+	TestedAt  time.Time         `json:"tested_at"`
+	ProfileID int64             `json:"profile_id"`
+	Target    string            `json:"target"`
 }
 
 // ValidationCheck is one check within a credential validation.
@@ -334,29 +334,29 @@ type AssetInfo struct {
 
 // InstalledPackage represents a package discovered on a Linux host.
 type InstalledPackage struct {
-	Name       string `json:"name"`
-	Version    string `json:"version"`
-	Arch       string `json:"arch,omitempty"`
-	CPE23URI   string `json:"cpe_2_3_uri,omitempty"`
-	Status     string `json:"status"` // installed, removed, changed
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	Arch     string `json:"arch,omitempty"`
+	CPE23URI string `json:"cpe_2_3_uri,omitempty"`
+	Status   string `json:"status"` // installed, removed, changed
 }
 
 // InstalledSoftware represents installed software on a Windows host.
 type InstalledSoftware struct {
-	Name         string `json:"name"`
-	Version      string `json:"version"`
-	Vendor       string `json:"vendor,omitempty"`
-	InstallDate  string `json:"install_date,omitempty"`
-	CPE23URI     string `json:"cpe_2_3_uri,omitempty"`
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Vendor      string `json:"vendor,omitempty"`
+	InstallDate string `json:"install_date,omitempty"`
+	CPE23URI    string `json:"cpe_2_3_uri,omitempty"`
 }
 
 // SecurityFinding represents a security configuration check result.
 type SecurityFinding struct {
-	CheckID   string `json:"check_id"`
-	Name      string `json:"name"`
-	Severity  string `json:"severity"`
-	Status    string `json:"status"` // pass, warn, fail
-	Evidence  string `json:"evidence,omitempty"`
+	CheckID  string `json:"check_id"`
+	Name     string `json:"name"`
+	Severity string `json:"severity"`
+	Status   string `json:"status"` // pass, warn, fail
+	Evidence string `json:"evidence,omitempty"`
 }
 
 // ScanProgress represents a real-time progress update during an assessment scan.
@@ -369,19 +369,156 @@ type ScanProgress struct {
 
 // AssessmentResult holds the output of an authenticated assessment scan.
 type AssessmentResult struct {
-	ID           int64                `json:"id"`
-	Target       string               `json:"target"`
-	ProfileID    int64                `json:"profile_id"`
-	ProfileName  string               `json:"profile_name,omitempty"`
-	Protocol     Protocol             `json:"protocol"`
-	StartedAt    time.Time            `json:"started_at"`
-	Duration     string               `json:"duration"`
-	Asset        *AssetInfo           `json:"asset,omitempty"`
-	Packages     []InstalledPackage   `json:"packages,omitempty"`
-	Software     []InstalledSoftware  `json:"software,omitempty"`
-	Findings     []SecurityFinding    `json:"findings,omitempty"`
-	CVEs         []CVE                `json:"cves,omitempty"`
-	RiskScore    float64              `json:"risk_score"`
-	Validation   *ValidationResult    `json:"validation,omitempty"`
-	Status       string               `json:"status"`
+	ID          int64               `json:"id"`
+	Target      string              `json:"target"`
+	ProfileID   int64               `json:"profile_id"`
+	ProfileName string              `json:"profile_name,omitempty"`
+	Protocol    Protocol            `json:"protocol"`
+	StartedAt   time.Time           `json:"started_at"`
+	Duration    string              `json:"duration"`
+	Asset       *AssetInfo          `json:"asset,omitempty"`
+	Packages    []InstalledPackage  `json:"packages,omitempty"`
+	Software    []InstalledSoftware `json:"software,omitempty"`
+	Findings    []SecurityFinding   `json:"findings,omitempty"`
+	CVEs        []CVE               `json:"cves,omitempty"`
+	RiskScore   float64             `json:"risk_score"`
+	Validation  *ValidationResult   `json:"validation,omitempty"`
+	Status      string              `json:"status"`
+}
+
+// ============================================================================
+// External Attack Surface Management (EASM) Types
+// ============================================================================
+
+// EASMScanType enumerates supported scan input types.
+type EASMScanType string
+
+const (
+	EASMScanDomain EASMScanType = "domain"
+	EASMScanCIDR   EASMScanType = "cidr"
+	EASMScanIP     EASMScanType = "ip"
+)
+
+// EASMWordlistSize enumerates wordlist sizes for active DNS bruteforce.
+type EASMWordlistSize string
+
+const (
+	EASMWordlistPassive EASMWordlistSize = "passive"
+	EASMWordlistSmall   EASMWordlistSize = "small"
+	EASMWordlistMedium  EASMWordlistSize = "medium"
+	EASMWordlistLarge   EASMWordlistSize = "large"
+	EASMWordlistCustom  EASMWordlistSize = "custom"
+)
+
+// EASMPortLevel enumerates port scan levels.
+type EASMPortLevel string
+
+const (
+	EASMPortFast EASMPortLevel = "fast"
+	EASMPortFull EASMPortLevel = "full"
+)
+
+// EASMScanRequest is the API request to create a new EASM scan.
+type EASMScanRequest struct {
+	Target         string           `json:"target"`
+	ScanType       EASMScanType     `json:"scan_type"`
+	Wordlist       EASMWordlistSize `json:"wordlist"`
+	CustomWordlist []string         `json:"custom_wordlist,omitempty"`
+	Ports          EASMPortLevel    `json:"ports"`
+	CustomPorts    string           `json:"custom_ports,omitempty"`
+	Screenshots    bool             `json:"screenshots"`
+	Workers        int              `json:"workers"`
+}
+
+// EASMScan represents a single EASM scan run.
+type EASMScan struct {
+	ID            int64            `json:"id"`
+	Target        string           `json:"target"`
+	ScanType      EASMScanType     `json:"scan_type"`
+	Wordlist      EASMWordlistSize `json:"wordlist"`
+	Ports         EASMPortLevel    `json:"ports"`
+	StartedAt     time.Time        `json:"started_at"`
+	CompletedAt   *time.Time       `json:"completed_at,omitempty"`
+	Duration      string           `json:"duration"`
+	Status        string           `json:"status"` // running, completed, failed
+	TotalAssets   int              `json:"total_assets"`
+	AliveAssets   int              `json:"alive_assets"`
+	TotalServices int              `json:"total_services"`
+	TotalCVEs     int              `json:"total_cves"`
+	CriticalCVEs  int              `json:"critical_cves"`
+	HighCVEs      int              `json:"high_cves"`
+	MediumCVEs    int              `json:"medium_cves"`
+	LowCVEs       int              `json:"low_cves"`
+	KEVCVEs       int              `json:"kev_cves"`
+	AvgEPSS       float64          `json:"avg_epss"`
+	Error         string           `json:"error,omitempty"`
+}
+
+// EASMAsset represents a discovered asset (subdomain/IP/host).
+type EASMAsset struct {
+	ID           int64     `json:"id"`
+	ScanID       int64     `json:"scan_id"`
+	Hostname     string    `json:"hostname"`
+	IPAddress    string    `json:"ip_address"`
+	IPv6Address  string    `json:"ipv6_address,omitempty"`
+	CNAME        string    `json:"cname,omitempty"`
+	IsAlive      bool      `json:"is_alive"`
+	IsWildcard   bool      `json:"is_wildcard"`
+	Source       string    `json:"source"`     // passive, bruteforce, custom
+	AssetType    string    `json:"asset_type"` // subdomain, ip
+	DiscoveredAt time.Time `json:"discovered_at"`
+}
+
+// EASMService represents a service discovered on an EASM asset.
+type EASMService struct {
+	ID         int64  `json:"id"`
+	AssetID    int64  `json:"asset_id"`
+	Port       int    `json:"port"`
+	Protocol   string `json:"protocol"`
+	Service    string `json:"service"`
+	Product    string `json:"product"`
+	Version    string `json:"version"`
+	Banner     string `json:"banner"`
+	Confidence int    `json:"confidence"`
+	Technology string `json:"technology"`
+	CPE23URI   string `json:"cpe_2_3_uri"`
+}
+
+// EASMFinding represents a CVE finding mapped to a service.
+type EASMFinding struct {
+	ID             int64    `json:"id"`
+	ServiceID      int64    `json:"service_id"`
+	ScanID         int64    `json:"scan_id"`
+	CVEID          string   `json:"cve_id"`
+	CVSSv3         *float64 `json:"cvss_v3,omitempty"`
+	CVSSv2         *float64 `json:"cvss_v2,omitempty"`
+	Severity       string   `json:"severity"`
+	Description    string   `json:"description"`
+	IsKEV          bool     `json:"is_kev"`
+	EPSSScore      *float64 `json:"epss_score,omitempty"`
+	EPSSPercentile *float64 `json:"epss_percentile,omitempty"`
+	MatchedCPE     string   `json:"matched_cpe"`
+	MatchedVersion string   `json:"matched_version"`
+}
+
+// EASMScanProgress is streamed via SSE during an EASM scan.
+type EASMScanProgress struct {
+	Step        string `json:"step"`
+	Progress    int    `json:"progress"` // 0-100
+	Message     string `json:"message"`
+	AssetsFound int    `json:"assets_found,omitempty"`
+	AliveAssets int    `json:"alive_assets,omitempty"`
+	CVEsFound   int    `json:"cves_found,omitempty"`
+}
+
+// EASMCompareResult holds the diff between two scans.
+type EASMCompareResult struct {
+	ScanA         EASMScan `json:"scan_a"`
+	ScanB         EASMScan `json:"scan_b"`
+	NewAssets     []string `json:"new_assets,omitempty"`
+	RemovedAssets []string `json:"removed_assets,omitempty"`
+	NewPorts      []string `json:"new_ports,omitempty"`
+	NewServices   []string `json:"new_services,omitempty"`
+	NewCVEs       []string `json:"new_cves,omitempty"`
+	ResolvedCVEs  []string `json:"resolved_cves,omitempty"`
 }

@@ -51,6 +51,10 @@ type sqliteDB struct {
 	swRepo             *sqliteInstalledSoftwareRepo
 	secFindingRepo     *sqliteSecurityFindingRepo
 	credValidationRepo *sqliteCredentialValidationRepo
+	easmScanRepo       *sqliteEASMScanRepo
+	easmAssetRepo      *sqliteEASMAssetRepo
+	easmServiceRepo    *sqliteEASMServiceRepo
+	easmFindingRepo    *sqliteEASMFindingRepo
 
 	mu sync.RWMutex
 }
@@ -97,6 +101,10 @@ func NewSQLiteDatabase(ctx context.Context, path string) (Database, error) {
 	sqlite.swRepo = &sqliteInstalledSoftwareRepo{db: db}
 	sqlite.secFindingRepo = &sqliteSecurityFindingRepo{db: db}
 	sqlite.credValidationRepo = &sqliteCredentialValidationRepo{db: db}
+	sqlite.easmScanRepo = &sqliteEASMScanRepo{db: db}
+	sqlite.easmAssetRepo = &sqliteEASMAssetRepo{db: db}
+	sqlite.easmServiceRepo = &sqliteEASMServiceRepo{db: db}
+	sqlite.easmFindingRepo = &sqliteEASMFindingRepo{db: db}
 
 	// Run migrations.
 	if err := sqlite.migrate(ctx); err != nil {
@@ -162,6 +170,10 @@ func (s *sqliteDB) InstalledPackage() InstalledPackageRepository         { retur
 func (s *sqliteDB) InstalledSoftware() InstalledSoftwareRepository       { return s.swRepo }
 func (s *sqliteDB) SecurityFinding() SecurityFindingRepository           { return s.secFindingRepo }
 func (s *sqliteDB) CredentialValidation() CredentialValidationRepository { return s.credValidationRepo }
+func (s *sqliteDB) EASMScan() EASMScanRepository                         { return s.easmScanRepo }
+func (s *sqliteDB) EASMAsset() EASMAssetRepository                       { return s.easmAssetRepo }
+func (s *sqliteDB) EASMService() EASMServiceRepository                   { return s.easmServiceRepo }
+func (s *sqliteDB) EASMFinding() EASMFindingRepository                   { return s.easmFindingRepo }
 
 // Info returns aggregate database statistics.
 func (s *sqliteDB) Info(ctx context.Context) (*models.DatabaseInfo, error) {

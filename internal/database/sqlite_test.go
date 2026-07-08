@@ -1,4 +1,5 @@
 package database
+
 import (
 	"context"
 	"fmt"
@@ -7,6 +8,7 @@ import (
 	"testing"
 	"time"
 )
+
 func setupTestDB(t *testing.T) (Database, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -367,15 +369,15 @@ func TestVacuum(t *testing.T) {
 func TestToDomainCVE(t *testing.T) {
 	now := time.Now()
 	dbCVE := &DBCVE{
-		CVEID:       "CVE-2024-0001",
-		Description: "Test",
-		CVSSv3:      float64Ptr(9.8),
-		Severity:    "CRITICAL",
+		CVEID:            "CVE-2024-0001",
+		Description:      "Test",
+		CVSSv3:           float64Ptr(9.8),
+		Severity:         "CRITICAL",
 		PublishedDate:    now,
 		LastModifiedDate: now,
 		ReferencesJSON:   `["https://example.com"]`,
 	}
-	
+
 	dbKEV := &DBKEV{DueDate: "2024-06-01", Notes: "test"}
 	dbEpss := &DBEpss{Score: 0.95, Percentile: 99.0}
 	cve := ToDomainCVE(dbCVE, dbKEV, dbEpss)
@@ -489,6 +491,7 @@ func TestFindByCPE23URI(t *testing.T) {
 		t.Errorf("expected 1 CVE, got %d", len(cves))
 	}
 }
+
 // -- Helpers ----------------------------------------------------------------
 func insertTestCPE(t *testing.T, db Database, vendorID, productID int64, version string) int64 {
 	t.Helper()

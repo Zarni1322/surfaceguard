@@ -35,8 +35,8 @@ import (
 
 // Scanner is a concurrent TCP port scanner.
 type Scanner struct {
-	timeout time.Duration
-	workers int
+	timeout    time.Duration
+	workers    int
 	bannerSize int
 }
 
