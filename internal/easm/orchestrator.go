@@ -16,6 +16,7 @@ import (
 	"github.com/evilhunter/surfaceguard/internal/easm/discovery"
 	"github.com/evilhunter/surfaceguard/internal/fingerprint"
 	"github.com/evilhunter/surfaceguard/internal/matcher"
+	"github.com/evilhunter/surfaceguard/internal/wordlist"
 	"github.com/evilhunter/surfaceguard/pkg/models"
 	"github.com/evilhunter/surfaceguard/pkg/portscan"
 )
@@ -159,17 +160,27 @@ func (o *Orchestrator) runWithID(ctx context.Context, req models.EASMScanRequest
 
 		// Active bruteforce (if requested).
 		if string(req.Wordlist) != "" && string(req.Wordlist) != string(models.EASMWordlistPassive) {
-			wordlistPath := discovery.WordlistPath(string(req.Wordlist))
 			var words []string
 			if string(req.Wordlist) == string(models.EASMWordlistCustom) && len(req.CustomWordlist) > 0 {
 				words = req.CustomWordlist
-			} else if wordlistPath != "" {
-				// Read wordlist file
-				lines, err := readLines(wordlistPath)
+			} else {
+				// Load from managed wordlist system
+				wlManager := wordlist.NewManager(".")
+				var wlSize wordlist.WordlistSize
+				switch string(req.Wordlist) {
+				case "small":
+					wlSize = wordlist.SizeSmall
+				case "medium":
+					wlSize = wordlist.SizeMedium
+				case "large":
+					wlSize = wordlist.SizeLarge
+				default:
+					wlSize = wordlist.SizeSmall
+				}
+				var err error
+				words, err = wlManager.LoadWordlist(wlSize)
 				if err != nil {
-					o.logger.Warn("wordlist not found, skipping bruteforce", "path", wordlistPath)
-				} else {
-					words = lines
+					o.logger.Warn("wordlist not loaded, skipping bruteforce", "size", wlSize, "error", err)
 				}
 			}
 
@@ -704,11 +715,6 @@ func deduplicateSubdomains(results []discovery.SubdomainResult) []discovery.Subd
 		}
 	}
 	return res
-}
-
-var readLines = func(path string) ([]string, error) {
-	// Will be replaced with proper file reading when needed
-	return nil, fmt.Errorf("wordlist %s not available, implement file reading", path)
 }
 
 // ScannerVersion returns the current scanner version string.

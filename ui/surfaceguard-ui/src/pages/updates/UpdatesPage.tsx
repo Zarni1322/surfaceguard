@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { RefreshCw, Loader2, Database, CheckCircle2, AlertCircle } from "lucide-react";
+import { RefreshCw, Loader2, Database, CheckCircle2, AlertCircle, Globe, Download, Shield, Trash2 } from "lucide-react";
 import { useDbInfo } from "@/hooks/useApi";
+import { getWordlistStatus, downloadWordlists, verifyWordlists, deleteWordlists, checkWordlistUpdates } from "@/api/client";
 import { formatDate } from "@/lib/utils";
 import PageContainer, { colSpan } from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
@@ -61,6 +62,46 @@ export default function UpdatesPage() {
       es.close();
     };
   };
+
+  const [wlStatus, setWlStatus] = useState<any>(null);
+  const [wlLoading, setWlLoading] = useState(false);
+  const [wlDownloading, setWlDownloading] = useState(false);
+
+  useEffect(() => { loadWlStatus(); }, []);
+
+  async function loadWlStatus() {
+    try { setWlStatus(await getWordlistStatus()); } catch {}
+  }
+
+  async function handleWlDownload() {
+    setWlDownloading(true);
+    try {
+      await downloadWordlists();
+      toast.success("Wordlists downloaded");
+      loadWlStatus();
+    } catch { toast.error("Download failed"); } finally { setWlDownloading(false); }
+  }
+
+  async function handleWlVerify() {
+    try {
+      const r = await verifyWordlists();
+      toast.success(r.valid ? "All wordlists valid" : "Corruption detected");
+    } catch { toast.error("Verify failed"); }
+  }
+
+  async function handleWlDelete() {
+    if (!window.confirm("Delete all cached wordlists?")) return;
+    try { await deleteWordlists(); toast.success("Wordlists deleted"); loadWlStatus(); } catch { toast.error("Delete failed"); }
+  }
+
+  async function handleWlCheckUpdate() {
+    try {
+      const r = await checkWordlistUpdates();
+      if (r.needs_update) toast.info("Update available: " + r.latest_version);
+      else toast.success("Already up to date");
+      loadWlStatus();
+    } catch { toast.error("Check failed"); }
+  }
 
   const lastUpdate = dbInfo?.last_updated ? formatDate(dbInfo.last_updated) : "Unknown";
   const feedStatus = updating ? "updating" : (dbInfo?.cve_count ? "up-to-date" : "unknown");
@@ -133,6 +174,73 @@ export default function UpdatesPage() {
           status={dbInfo?.epss_count ? "up-to-date" : "unknown"}
         />
       </div>
+
+      {/* Wordlists Section */}
+      <Card className="border-[#1E293B] bg-[#1E293B]">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-lg text-[#F8FAFC] flex items-center gap-2">
+            <Globe className="h-5 w-5 text-[#3B82F6]" /> DNS Wordlists
+          </CardTitle>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="border-[#0B1220] text-[#94A3B8] h-8" onClick={handleWlCheckUpdate} disabled={wlLoading}><RefreshCw className="h-3 w-3 mr-1" />Check</Button>
+            <Button variant="outline" size="sm" className="border-[#0B1220] text-[#94A3B8] h-8" onClick={handleWlVerify} disabled={wlLoading}><Shield className="h-3 w-3 mr-1" />Verify</Button>
+            <Button variant="outline" size="sm" className="border-red-500/30 text-red-400 hover:bg-red-500/10 h-8" onClick={handleWlDelete} disabled={wlLoading}><Trash2 className="h-3 w-3 mr-1" />Delete</Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {wlStatus ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+                <div className="rounded-lg bg-[#0B1220] p-4">
+                  <p className="text-xs text-[#94A3B8]">Status</p>
+                  <Badge variant="outline" className={`mt-1 text-xs ${wlStatus.status === "installed" ? "border-[#22C55E] text-[#22C55E]" : wlStatus.status === "update_available" ? "border-[#F59E0B] text-[#F59E0B]" : "border-[#F59E0B] text-[#F59E0B]"}`}>
+                    {wlStatus.installed ? (wlStatus.status === "update_available" ? "Update Available" : "Installed") : "Not Installed"}
+                  </Badge>
+                </div>
+                <div className="rounded-lg bg-[#0B1220] p-4">
+                  <p className="text-xs text-[#94A3B8]">Current Version</p>
+                  <p className="text-lg font-bold text-[#F8FAFC]">{wlStatus.current_version || "—"}</p>
+                </div>
+                <div className="rounded-lg bg-[#0B1220] p-4">
+                  <p className="text-xs text-[#94A3B8]">Latest Version</p>
+                  <p className="text-lg font-bold text-[#3B82F6]">{wlStatus.latest_version || "—"}</p>
+                </div>
+                <div className="rounded-lg bg-[#0B1220] p-4">
+                  <p className="text-xs text-[#94A3B8]">Last Updated</p>
+                  <p className="text-sm font-bold text-[#F8FAFC]">{wlStatus.last_updated ? new Date(wlStatus.last_updated).toLocaleDateString() : "—"}</p>
+                </div>
+              </div>
+              {wlStatus.counts && (
+                <div className="grid gap-3 grid-cols-3">
+                  <div className="rounded-lg bg-[#0B1220] p-3 flex items-center justify-between">
+                    <span className="text-xs text-[#94A3B8]">Small</span>
+                    <span className="text-sm font-bold text-[#F8FAFC]">{(wlStatus.counts.small || 0).toLocaleString()} names</span>
+                  </div>
+                  <div className="rounded-lg bg-[#0B1220] p-3 flex items-center justify-between">
+                    <span className="text-xs text-[#94A3B8]">Medium</span>
+                    <span className="text-sm font-bold text-[#F8FAFC]">{(wlStatus.counts.medium || 0).toLocaleString()} names</span>
+                  </div>
+                  <div className="rounded-lg bg-[#0B1220] p-3 flex items-center justify-between">
+                    <span className="text-xs text-[#94A3B8]">Large</span>
+                    <span className="text-sm font-bold text-[#F8FAFC]">{(wlStatus.counts.large || 0).toLocaleString()} names</span>
+                  </div>
+                </div>
+              )}
+              {!wlStatus.installed && (
+                <Button onClick={handleWlDownload} disabled={wlDownloading} className="bg-[#3B82F6] hover:bg-[#2563EB]">
+                  {wlDownloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                  {wlDownloading ? "Downloading..." : "Download Wordlists"}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-[#3B82F6] mr-2" />
+              <span className="text-sm text-[#94A3B8]">Loading wordlist status...</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* DB Summary */}
       <Card className="border-[#1E293B] bg-[#1E293B]">

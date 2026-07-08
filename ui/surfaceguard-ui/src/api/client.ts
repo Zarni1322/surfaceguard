@@ -202,4 +202,29 @@ export async function getEASMDashboardStats(): Promise<any> {
   return data;
 }
 
+export async function getWordlistStatus(): Promise<any> {
+  const { data } = await api.get("/wordlists/status");
+  return data;
+}
+
+export async function downloadWordlists(): Promise<any> {
+  const { data } = await api.post("/wordlists/download");
+  return data;
+}
+
+export async function verifyWordlists(): Promise<any> {
+  const { data } = await api.get("/wordlists/verify");
+  return data;
+}
+
+export async function deleteWordlists(): Promise<any> {
+  const { data } = await api.post("/wordlists/delete");
+  return data;
+}
+
+export async function checkWordlistUpdates(): Promise<any> {
+  const { data } = await api.get("/wordlists/check-update");
+  return data;
+}
+
 export default api;

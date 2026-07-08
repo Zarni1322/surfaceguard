@@ -24,6 +24,7 @@ import (
 	"github.com/evilhunter/surfaceguard/internal/database"
 	"github.com/evilhunter/surfaceguard/internal/easm"
 	"github.com/evilhunter/surfaceguard/internal/matcher"
+	"github.com/evilhunter/surfaceguard/internal/wordlist"
 	"github.com/evilhunter/surfaceguard/pkg/models"
 )
 
@@ -524,10 +525,84 @@ func main() {
 	mux.HandleFunc("/api/easm/findings/detail", handleEASMFindingsDetail)
 	mux.HandleFunc("/api/easm/asset/detail", handleEASMAssetDetail)
 	mux.HandleFunc("/api/easm/dashboard", handleEASMDashboardStats)
+	mux.HandleFunc("/api/wordlists/status", handleWordlistStatus)
+	mux.HandleFunc("/api/wordlists/download", handleWordlistDownload)
+	mux.HandleFunc("/api/wordlists/verify", handleWordlistVerify)
+	mux.HandleFunc("/api/wordlists/delete", handleWordlistDelete)
+	mux.HandleFunc("/api/wordlists/check-update", handleWordlistCheckUpdate)
 
 	addr := ":8080"
 	fmt.Printf("SurfaceGuard API server on %s\n", addr)
 	log.Fatal(http.ListenAndServe(addr, handler))
+}
+
+// Wordlist Manager
+var wordlistManager = wordlist.NewManager(".")
+
+func handleWordlistStatus(w http.ResponseWriter, r *http.Request) {
+	m := wordlistManager
+	meta, _ := m.LoadMetadata()
+	installed := m.IsInstalled()
+
+	smallCount, mediumCount, largeCount := 0, 0, 0
+	if installed {
+		smallCount = m.WordlistCount(wordlist.SizeSmall)
+		mediumCount = m.WordlistCount(wordlist.SizeMedium)
+		largeCount = m.WordlistCount(wordlist.SizeLarge)
+	}
+	writeJSON(w, map[string]interface{}{
+		"installed": installed, "status": m.Status(),
+		"current_version": meta.CurrentVersion, "latest_version": meta.LatestVersion,
+		"last_updated": meta.LastUpdated, "wordlists": meta.Wordlists,
+		"counts": map[string]int{"small": smallCount, "medium": mediumCount, "large": largeCount},
+	})
+}
+
+func handleWordlistDownload(w http.ResponseWriter, r *http.Request) {
+	m := wordlistManager
+	count, err := m.DownloadAll(context.Background(), nil)
+	if err != nil && count == 0 {
+		writeJSON(w, map[string]interface{}{"status": "failed", "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]interface{}{"status": "ok", "downloaded": count})
+}
+
+func handleWordlistVerify(w http.ResponseWriter, r *http.Request) {
+	results, err := wordlistManager.VerifyIntegrity()
+	if err != nil {
+		writeJSON(w, map[string]interface{}{"status": "failed", "error": err.Error()})
+		return
+	}
+	allOK := true
+	for _, ok := range results {
+		if !ok {
+			allOK = false
+			break
+		}
+	}
+	writeJSON(w, map[string]interface{}{"status": "ok", "valid": allOK, "results": results})
+}
+
+func handleWordlistDelete(w http.ResponseWriter, r *http.Request) {
+	if err := wordlistManager.DeleteCache(); err != nil {
+		writeJSON(w, map[string]interface{}{"status": "failed", "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]interface{}{"status": "ok"})
+}
+
+func handleWordlistCheckUpdate(w http.ResponseWriter, r *http.Request) {
+	needsUpdate, latestVersion, err := wordlistManager.CheckForUpdates(context.Background())
+	if err != nil {
+		writeJSON(w, map[string]interface{}{"status": "failed", "error": err.Error()})
+		return
+	}
+	meta, _ := wordlistManager.LoadMetadata()
+	writeJSON(w, map[string]interface{}{
+		"status": "ok", "needs_update": needsUpdate,
+		"current_version": meta.CurrentVersion, "latest_version": latestVersion,
+	})
 }
 
 func fastPing(ip string) bool {
