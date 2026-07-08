@@ -48,14 +48,13 @@ export default function EASMDashboard() {
         workers: form.workers,
         screenshots: false,
       } as any);
-      toast.success("Scan created");
       setShowForm(false);
-      loadScans();
-      if (res.scan_id) navigate(`/easm/${res.scan_id}`);
+      if (res.scan_id) navigate(`/easm/${res.scan_id}`, { replace: true });
     } catch (e: any) {
-      const msg = e?.response?.data?.error || e?.message || "Request timed out. Check scan history for results.";
+      const msg = e?.response?.data?.error || e?.message || "Request timed out.";
       toast.error(msg);
-    } finally { setScanning(false); }
+      setScanning(false);
+    }
   }
 
   async function handleReset() {

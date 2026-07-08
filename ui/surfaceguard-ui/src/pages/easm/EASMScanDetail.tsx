@@ -42,7 +42,11 @@ export default function EASMScanDetail() {
     if (!id) return;
     loadData(parseInt(id));
     pollRef.current = setInterval(() => { if (id) loadData(parseInt(id)); }, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    const fallbackTimer = setTimeout(() => setLoading(false), 15000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      clearTimeout(fallbackTimer);
+    };
   }, [id]);
 
   async function loadData(scanId: number) {
@@ -52,14 +56,17 @@ export default function EASMScanDetail() {
         getEASMAssets(scanId).catch(() => []),
         getEASMFindings(scanId).catch(() => []),
       ]);
-      const s = scans.find((x: EASMScan) => x.id === scanId) || null;
-      if (s) setScan(s);
-      setAssets(assetsData);
-      if (findingsData) setFindings(findingsData);
+      const s = scans?.find((x: EASMScan) => x.id === scanId) || null;
+      if (s) {
+        setScan(s);
+        setLoading(false);
+      }
+      setAssets(assetsData || []);
+      setFindings(findingsData || []);
       if (s && (s.status === "completed" || s.status === "failed")) {
         if (pollRef.current) clearInterval(pollRef.current);
       }
-    } catch { /* poll retries */ } finally { setLoading(false); }
+    } catch { /* poll retries */ }
   }
 
   if (loading && !scan) {
