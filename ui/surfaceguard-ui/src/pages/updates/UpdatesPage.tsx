@@ -212,7 +212,6 @@ export default function UpdatesPage() {
           </div>
         </CardContent>
       </Card>
-      </div>
       <Card className="border-[#1E293B] bg-[#1E293B]">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-lg text-[#F8FAFC] flex items-center gap-2">
@@ -293,6 +292,7 @@ export default function UpdatesPage() {
 
 
       {/* Wordlists Section */}
+      </div>
     </PageContainer>
   );
 }
@@ -362,5 +362,6 @@ function FeedCard({
         </div>
       </CardContent>
     </Card>
+
   );
 }
