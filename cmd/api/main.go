@@ -1010,7 +1010,26 @@ func handleAssets(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	writeJSON(w, assets)
+	// Convert DB types to domain models (with JSON tags) before returning.
+	domainAssets := make([]models.AssetInfo, 0, len(assets))
+	for _, a := range assets {
+		lastSeen, _ := time.Parse(time.RFC3339, a.LastSeen)
+		lastScan, _ := time.Parse(time.RFC3339, a.LastScan)
+		domainAssets = append(domainAssets, models.AssetInfo{
+			ID:            a.ID,
+			Hostname:      a.Hostname,
+			IP:            a.IP,
+			OS:            a.OS,
+			Distro:        a.Distro,
+			KernelVersion: a.KernelVersion,
+			Architecture:  a.Architecture,
+			AssetType:     a.AssetType,
+			RiskScore:     a.RiskScore,
+			LastSeen:      lastSeen,
+			LastScan:      lastScan,
+		})
+	}
+	writeJSON(w, domainAssets)
 }
 
 func handleAsset(w http.ResponseWriter, r *http.Request) {
@@ -1036,10 +1055,42 @@ func handleAsset(w http.ResponseWriter, r *http.Request) {
 	packages, _ := db.InstalledPackage().ListByAsset(ctx, id)
 	software, _ := db.InstalledSoftware().ListByAsset(ctx, id)
 
+	lastSeen, _ := time.Parse(time.RFC3339, asset.LastSeen)
+	lastScan, _ := time.Parse(time.RFC3339, asset.LastScan)
+	domainAsset := models.AssetInfo{
+		ID:            asset.ID,
+		Hostname:      asset.Hostname,
+		IP:            asset.IP,
+		OS:            asset.OS,
+		Distro:        asset.Distro,
+		KernelVersion: asset.KernelVersion,
+		Architecture:  asset.Architecture,
+		AssetType:     asset.AssetType,
+		RiskScore:     asset.RiskScore,
+		LastSeen:      lastSeen,
+		LastScan:      lastScan,
+	}
+
+	// Convert packages and software to domain models too
+	domainPkgs := make([]models.InstalledPackage, len(packages))
+	for i, p := range packages {
+		domainPkgs[i] = models.InstalledPackage{
+			Name: p.Name, Version: p.Version, Arch: p.Arch,
+			CPE23URI: p.CPE23URI, Status: p.Status,
+		}
+	}
+	domainSW := make([]models.InstalledSoftware, len(software))
+	for i, s := range software {
+		domainSW[i] = models.InstalledSoftware{
+			Name: s.Name, Version: s.Version, Vendor: s.Vendor,
+			InstallDate: s.InstallDate, CPE23URI: s.CPE23URI,
+		}
+	}
+
 	writeJSON(w, map[string]interface{}{
-		"asset":    asset,
-		"packages": packages,
-		"software": software,
+		"asset":    domainAsset,
+		"packages": domainPkgs,
+		"software": domainSW,
 	})
 }
 
