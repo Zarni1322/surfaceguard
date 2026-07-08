@@ -522,6 +522,8 @@ func main() {
 	mux.HandleFunc("/api/easm/assets", handleEASMAssets)
 	mux.HandleFunc("/api/easm/findings", handleEASMFindings)
 	mux.HandleFunc("/api/easm/findings/detail", handleEASMFindingsDetail)
+	mux.HandleFunc("/api/easm/asset/detail", handleEASMAssetDetail)
+	mux.HandleFunc("/api/easm/dashboard", handleEASMDashboardStats)
 
 	addr := ":8080"
 	fmt.Printf("SurfaceGuard API server on %s\n", addr)
@@ -1482,6 +1484,246 @@ func handleAssessmentHistoryDelete(w http.ResponseWriter, r *http.Request) {
 	rawDB.ExecContext(ctx, "DELETE FROM installed_software")
 	rawDB.ExecContext(ctx, "DELETE FROM asset_inventory")
 	writeJSON(w, map[string]interface{}{"status": "ok"})
+}
+
+// handleEASMAssetDetail returns enriched asset info with services, findings, risk.
+func handleEASMAssetDetail(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	cfg := loadConfigOrPanic()
+	assetID, err := strconv.ParseInt(r.URL.Query().Get("asset_id"), 10, 64)
+	if err != nil {
+		http.Error(w, "asset_id required", 400)
+		return
+	}
+	dbPath, err := cfg.ResolveDatabasePath()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	db, err := database.NewSQLiteDatabase(ctx, dbPath)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer db.Close()
+
+	// Get all assets and find the one with matching ID
+	allScans, _ := db.EASMScan().List(ctx, 9999)
+	var foundAsset *database.DBEASMAsset
+	for _, s := range allScans {
+		assets, _ := db.EASMAsset().ListByScan(ctx, s.ID)
+		for _, a := range assets {
+			if a.ID == assetID {
+				foundAsset = &a
+				break
+			}
+		}
+		if foundAsset != nil {
+			break
+		}
+	}
+	if foundAsset == nil {
+		http.Error(w, "asset not found", 404)
+		return
+	}
+
+	domainAsset := &models.EASMAsset{
+		ID: foundAsset.ID, ScanID: foundAsset.ScanID, Hostname: foundAsset.Hostname,
+		IPAddress: foundAsset.IPAddress, IPv6Address: foundAsset.IPv6Address,
+		CNAME: foundAsset.CNAME, IsAlive: foundAsset.IsAlive == 1,
+		IsWildcard: foundAsset.IsWildcard == 1, Source: foundAsset.Source,
+		AssetType: foundAsset.AssetType,
+	}
+
+	dbServices, _ := db.EASMService().ListByAsset(ctx, assetID)
+	services := make([]models.EASMService, len(dbServices))
+	techMap := make(map[string]bool)
+	for i, s := range dbServices {
+		services[i] = models.EASMService{
+			ID: s.ID, AssetID: s.AssetID, Port: s.Port, Protocol: s.Protocol,
+			Service: s.Service, Product: s.Product, Version: s.Version,
+			Banner: s.Banner, Confidence: s.Confidence, Technology: s.Technology,
+			CPE23URI: s.CPE23URI,
+		}
+		if s.Technology != "" {
+			techMap[s.Technology] = true
+		}
+	}
+
+	var allFindings []models.EASMFinding
+	for _, svc := range dbServices {
+		dbFindings, _ := db.EASMFinding().ListByService(ctx, svc.ID)
+		for _, f := range dbFindings {
+			mf := dbEASMFindingToModel(&f)
+			allFindings = append(allFindings, *mf)
+		}
+	}
+
+	cveCount := len(allFindings)
+	kevCount := 0
+	highestCVSS := 0.0
+	var totalEPSS, avgEPSS float64
+	epssCount := 0
+	criticalCount := 0
+	topSeverity := "NONE"
+	sevRank := map[string]int{"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "NONE": 0}
+	for _, f := range allFindings {
+		if f.IsKEV {
+			kevCount++
+		}
+		if f.CVSSv3 != nil && *f.CVSSv3 > highestCVSS {
+			highestCVSS = *f.CVSSv3
+		}
+		if f.EPSSScore != nil {
+			totalEPSS += *f.EPSSScore
+			epssCount++
+		}
+		if sevRank[f.Severity] > sevRank[topSeverity] {
+			topSeverity = f.Severity
+		}
+		if f.Severity == "CRITICAL" {
+			criticalCount++
+		}
+	}
+	if epssCount > 0 {
+		avgEPSS = totalEPSS / float64(epssCount)
+	}
+
+	riskScore := highestCVSS
+	if kevCount > 0 {
+		riskScore *= 1.3
+	}
+	riskScore += float64(criticalCount) * 2
+	if len(dbServices) > 5 {
+		riskScore += 2
+	}
+	if riskScore > 100 {
+		riskScore = 100
+	}
+	riskLevel := "LOW"
+	switch {
+	case riskScore >= 70:
+		riskLevel = "CRITICAL"
+	case riskScore >= 40:
+		riskLevel = "HIGH"
+	case riskScore >= 20:
+		riskLevel = "MEDIUM"
+	}
+
+	technologies := make([]string, 0, len(techMap))
+	for t := range techMap {
+		technologies = append(technologies, t)
+	}
+
+	writeJSON(w, models.EASMAssetDetail{
+		EASMAsset: *domainAsset, Services: services, Findings: allFindings,
+		CVECount: cveCount, KEVCount: kevCount, RiskScore: riskScore,
+		RiskLevel: riskLevel, TopSeverity: topSeverity, AvgEPSS: avgEPSS,
+		Technologies: technologies,
+	})
+}
+
+// handleEASMDashboardStats returns aggregate EASM statistics.
+func handleEASMDashboardStats(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	cfg := loadConfigOrPanic()
+	dbPath, err := cfg.ResolveDatabasePath()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	db, err := database.NewSQLiteDatabase(ctx, dbPath)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer db.Close()
+
+	scans, _ := db.EASMScan().List(ctx, 50)
+	totalAssets := 0
+	aliveAssets := 0
+	totalCVEs := 0
+	totalKEV := 0
+	sevCounts := map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+	topSvc := make(map[string]int)
+	topTech := make(map[string]int)
+	highestRisk := 0.0
+	highestTarget := ""
+
+	for _, s := range scans {
+		totalAssets += s.TotalAssets
+		aliveAssets += s.AliveAssets
+		totalCVEs += s.TotalCVEs
+		totalKEV += s.KEVCVEs
+		sevCounts["CRITICAL"] += s.CriticalCVEs
+		sevCounts["HIGH"] += s.HighCVEs
+		sevCounts["MEDIUM"] += s.MediumCVEs
+		sevCounts["LOW"] += s.LowCVEs
+		svcs, _ := db.EASMService().ListByScan(ctx, s.ID)
+		for _, svc := range svcs {
+			topSvc[svc.Service]++
+			if svc.Technology != "" {
+				topTech[svc.Technology]++
+			}
+		}
+		risk := float64(s.TotalCVEs) * 0.5
+		if s.KEVCVEs > 0 {
+			risk *= 1.3
+		}
+		if risk > highestRisk {
+			highestRisk = risk
+			highestTarget = s.Target
+		}
+	}
+
+	avgEPSS := 0.0
+	if len(scans) > 0 {
+		findings, _ := db.EASMFinding().ListByScan(ctx, scans[0].ID)
+		eSum, eCnt := 0.0, 0
+		for _, f := range findings {
+			if f.EPSSScore != nil {
+				eSum += *f.EPSSScore
+				eCnt++
+			}
+		}
+		if eCnt > 0 {
+			avgEPSS = eSum / float64(eCnt)
+		}
+	}
+
+	toTop := func(m map[string]int, n int) []map[string]interface{} {
+		type kv struct {
+			k string
+			v int
+		}
+		var s []kv
+		for k, v := range m {
+			s = append(s, kv{k, v})
+		}
+		for i := 0; i < len(s); i++ {
+			for j := i + 1; j < len(s); j++ {
+				if s[j].v > s[i].v {
+					s[i], s[j] = s[j], s[i]
+				}
+			}
+		}
+		r := make([]map[string]interface{}, 0, n)
+		for i := 0; i < len(s) && i < n; i++ {
+			r = append(r, map[string]interface{}{"name": s[i].k, "count": s[i].v})
+		}
+		return r
+	}
+
+	writeJSON(w, map[string]interface{}{
+		"total_assets": totalAssets, "alive_assets": aliveAssets,
+		"total_cves": totalCVEs, "total_kev": totalKEV,
+		"avg_epss": avgEPSS, "scans_count": len(scans),
+		"severity":            sevCounts,
+		"highest_risk_target": highestTarget,
+		"highest_risk_score":  highestRisk,
+		"top_technologies":    toTop(topTech, 5),
+		"top_services":        toTop(topSvc, 5),
+	})
 }
 
 func dbEASMScanToModel(s *database.DBEASMScan) *models.EASMScan {

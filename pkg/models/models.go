@@ -518,6 +518,20 @@ type EASMAssetFindings struct {
 	CVECount int           `json:"cve_count"`
 }
 
+// EASMAssetDetail is the enriched asset view with services, CVEs, and risk score.
+type EASMAssetDetail struct {
+	EASMAsset
+	Services     []EASMService `json:"services,omitempty"`
+	Findings     []EASMFinding `json:"findings,omitempty"`
+	CVECount     int           `json:"cve_count"`
+	KEVCount     int           `json:"kev_count"`
+	RiskScore    float64       `json:"risk_score"`
+	RiskLevel    string        `json:"risk_level"`
+	TopSeverity  string        `json:"top_severity"`
+	AvgEPSS      float64       `json:"avg_epss"`
+	Technologies []string      `json:"technologies,omitempty"`
+}
+
 // EASMScanProgress is streamed via SSE during an EASM scan.
 type EASMScanProgress struct {
 	Step        string `json:"step"`
