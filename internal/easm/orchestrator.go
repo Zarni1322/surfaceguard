@@ -323,10 +323,15 @@ func (o *Orchestrator) Run(ctx context.Context, req models.EASMScanRequest, prog
 				Confidence: fp.Confidence,
 			}
 
-			// Generate CPE URIs (reuse fingerprint CPE generation).
+			// Resolve CPE URI: try fingerprint first, then fallback.
+			cpeURI := ""
 			if len(fp.CPEs) > 0 {
-				service.CPE23URI = fp.CPEs[0].CPE23URI
+				cpeURI = fp.CPEs[0].CPE23URI
 			}
+			if cpeURI == "" {
+				cpeURI = resolveCPE(fp.Service, fp.Product, fp.Version, fp.Port)
+			}
+			service.CPE23URI = cpeURI
 
 			allServices = append(allServices, service)
 			serviceDB = append(serviceDB, database.DBEASMService{
@@ -339,7 +344,7 @@ func (o *Orchestrator) Run(ctx context.Context, req models.EASMScanRequest, prog
 				Banner:     fp.Banner,
 				Confidence: fp.Confidence,
 				Technology: fp.Product,
-				CPE23URI:   service.CPE23URI,
+				CPE23URI:   cpeURI,
 			})
 		}
 	}
@@ -477,6 +482,136 @@ func (o *Orchestrator) Run(ctx context.Context, req models.EASMScanRequest, prog
 func (o *Orchestrator) failScan(ctx context.Context, scanID int64, errMsg string) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	o.db.EASMScan().UpdateStatus(ctx, scanID, "failed", now, 0, errMsg)
+}
+
+// ============================================================================
+// CPE Resolution for EASM Services
+// ============================================================================
+
+// easmCPEVendorMap maps service/product names to CPE vendors.
+var easmCPEVendorMap = map[string]string{
+	"http":          "apache",
+	"https":         "apache",
+	"nginx":         "nginx",
+	"Apache httpd":  "apache",
+	"Microsoft IIS": "microsoft",
+	"OpenSSH":       "openbsd",
+	"ssh":           "openbsd",
+	"ftp":           "beasts",
+	"vsftpd":        "beasts",
+	"ProFTPD":       "proftpd",
+	"Pure-FTPd":     "pureftpd",
+	"MySQL":         "oracle",
+	"mysql":         "oracle",
+	"MariaDB":       "mariadb",
+	"PostgreSQL":    "postgresql",
+	"postgresql":    "postgresql",
+	"Redis":         "redis",
+	"redis":         "redis",
+	"lighttpd":      "lighttpd",
+	"MongoDB":       "mongodb",
+	"mongodb":       "mongodb",
+	"Docker":        "docker",
+	"docker":        "docker",
+	"Elasticsearch": "elastic",
+	"elasticsearch": "elastic",
+	"RabbitMQ":      "pivotal_software",
+	"Tomcat":        "apache",
+	"Apache Tomcat": "apache",
+	"Jetty":         "eclipse",
+	"Eclipse Jetty": "eclipse",
+	"Node.js":       "nodejs",
+	"Python":        "python_software_foundation",
+	"smtp":          "postfix",
+	"pop3":          "gnu",
+	"imap":          "gnu",
+	"dns":           "isc",
+	"smb":           "samba",
+	"winrm":         "microsoft",
+	"telnet":        "linux",
+	"rpcbind":       "linux",
+	"nfs":           "linux",
+}
+
+var easmCPEProductMap = map[string]string{
+	"http":          "http_server",
+	"https":         "http_server",
+	"nginx":         "nginx",
+	"Apache httpd":  "http_server",
+	"Microsoft IIS": "internet_information_services",
+	"OpenSSH":       "openssh",
+	"ssh":           "openssh",
+	"ftp":           "vsftpd",
+	"vsftpd":        "vsftpd",
+	"ProFTPD":       "proftpd",
+	"Pure-FTPd":     "pure-ftpd",
+	"MySQL":         "mysql",
+	"mysql":         "mysql",
+	"MariaDB":       "mariadb",
+	"PostgreSQL":    "postgresql",
+	"postgresql":    "postgresql",
+	"Redis":         "redis",
+	"redis":         "redis",
+	"lighttpd":      "lighttpd",
+	"MongoDB":       "mongodb",
+	"mongodb":       "mongodb",
+	"Docker":        "docker",
+	"docker":        "docker",
+	"Elasticsearch": "elasticsearch",
+	"elasticsearch": "elasticsearch",
+	"RabbitMQ":      "rabbitmq",
+	"Tomcat":        "tomcat",
+	"Apache Tomcat": "tomcat",
+	"Jetty":         "jetty",
+	"Eclipse Jetty": "jetty",
+	"Node.js":       "node.js",
+	"Python":        "python",
+	"smtp":          "postfix",
+	"pop3":          "pop3",
+	"imap":          "imap",
+	"dns":           "bind",
+	"smb":           "samba",
+	"winrm":         "windows_remote_management",
+	"telnet":        "telnet",
+	"rpcbind":       "rpcbind",
+	"nfs":           "nfs_utils",
+}
+
+// resolveCPE generates a CPE URI for a service. Tries product→service→port.
+func resolveCPE(service, product, version string, port int) string {
+	for _, try := range []string{product, service} {
+		if try == "" {
+			continue
+		}
+		vendor := easmCPEVendorMap[try]
+		cp := easmCPEProductMap[try]
+		if vendor != "" && cp != "" {
+			v := version
+			if v == "" {
+				v = "*"
+			}
+			return fmt.Sprintf("cpe:2.3:a:%s:%s:%s:*:*:*:*:*:*:*", vendor, cp, v)
+		}
+	}
+	portCPE := map[int]struct{ vendor, product string }{
+		22: {"openbsd", "openssh"}, 80: {"apache", "http_server"},
+		443: {"apache", "http_server"}, 8080: {"apache", "http_server"},
+		8443: {"apache", "http_server"}, 21: {"beasts", "vsftpd"},
+		25: {"postfix", "postfix"}, 3306: {"oracle", "mysql"},
+		5432: {"postgresql", "postgresql"}, 6379: {"redis", "redis"},
+		27017: {"mongodb", "mongodb"}, 1433: {"microsoft", "sql_server"},
+		3389: {"microsoft", "windows_remote_desktop"},
+		5900: {"realvnc", "vnc"}, 9200: {"elastic", "elasticsearch"},
+		11211: {"memcached", "memcached"},
+	}
+	if p, ok := portCPE[port]; ok {
+		v := version
+		if v == "" {
+			v = "*"
+		}
+		return fmt.Sprintf("cpe:2.3:a:%s:%s:%s:*:*:*:*:*:*:*", p.vendor, p.product, v)
+	}
+	return ""
 }
 
 // ============================================================================
