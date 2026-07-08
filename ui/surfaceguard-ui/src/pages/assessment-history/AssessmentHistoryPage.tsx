@@ -85,10 +85,10 @@ export default function AssessmentHistoryPage() {
                       <ClipboardCheck className={`h-5 w-5 ${r.protocol === "ssh" ? "text-green-400" : r.protocol === "winrm" ? "text-blue-400" : "text-yellow-400"}`} />
                     </div>
                     <div>
-                      <h3 className="font-medium text-[#F8FAFC]">{r.target}</h3>
+                      <h3 className="font-medium text-[#F8FAFC]">{r.asset?.hostname || r.target}</h3>
                       <p className="text-sm text-[#94A3B8]">
+                        {r.target !== r.asset?.hostname && `${r.target} · `}
                         {r.protocol?.toUpperCase()} · {r.duration}
-                        {r.asset?.hostname && ` · ${r.asset.hostname}`}
                         {r.risk_score > 0 && ` · Risk: ${r.risk_score.toFixed(0)}`}
                         {r.cves && ` · ${r.cves.length} CVEs`}
                         {r.findings && ` · ${r.findings.length} findings`}
