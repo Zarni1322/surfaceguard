@@ -105,10 +105,12 @@ export default function HostDiscoveryPage() {
                 onClick={() => {
                   const text = hosts.join("\n");
                   const blob = new Blob([text], { type: "text/plain" });
+                  const url = URL.createObjectURL(blob);
                   const a = document.createElement("a");
-                  a.href = URL.createObjectURL(blob);
+                  a.href = url;
                   a.download = `hosts-${network.trim().replace("/", "_")}.txt`;
                   a.click();
+                  setTimeout(() => URL.revokeObjectURL(url), 1000);
                   toast.success("Exported");
                 }}>
                 <Download className="h-3 w-3 mr-1" /> Export

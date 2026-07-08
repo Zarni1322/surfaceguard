@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Shield, Bug, AlertTriangle, Activity, Scan, RefreshCw } from "lucide-react";
 import StatCard from "@/components/StatCard";
 import { useDbInfo } from "@/hooks/useApi";
@@ -12,6 +13,7 @@ import axios from "axios";
 import type { AssessmentResult } from "@/types";
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const { data: dbInfo, isLoading } = useDbInfo();
   const { data: history } = useQuery<AssessmentResult[]>({
     queryKey: ["dashboard-scans"],
@@ -136,8 +138,9 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function ActionButton({ icon: Icon, label, desc, href }: { icon: React.ComponentType<{ className?: string }>; label: string; desc: string; href: string }) {
+  const navigate = useNavigate();
   return (
-    <a href={href} className="flex items-center gap-3 rounded-lg border border-[#0B1220] bg-[#0B1220] p-3 transition hover:border-[#3B82F6]/30">
+    <div onClick={() => navigate(href)} className="flex items-center gap-3 rounded-lg border border-[#0B1220] bg-[#0B1220] p-3 transition hover:border-[#3B82F6]/30 cursor-pointer">
       <div className="rounded-lg bg-[#3B82F6]/10 p-2 shrink-0">
         <Icon className="h-4 w-4 text-[#3B82F6]" />
       </div>
@@ -145,7 +148,7 @@ function ActionButton({ icon: Icon, label, desc, href }: { icon: React.Component
         <p className="text-sm font-medium text-[#F8FAFC]">{label}</p>
         <p className="text-xs text-[#94A3B8] truncate">{desc}</p>
       </div>
-    </a>
+    </div>
   );
 }
 
