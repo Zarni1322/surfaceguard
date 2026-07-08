@@ -1,12 +1,13 @@
 // Package main is the CLI entrypoint for SurfaceGuard.
 //
 // Commands:
-//   scanner scan <target> [flags]   — Run a vulnerability scan
-//   scanner update [flags]          — Update CVE/CPE/KEV/EPSS databases
-//   scanner db info                 — Show database information
-//   scanner db verify               — Run integrity check
-//   scanner db vacuum               — Optimize database
-//   scanner version                 — Show version information
+//
+//	scanner scan <target> [flags]   — Run a vulnerability scan
+//	scanner update [flags]          — Update CVE/CPE/KEV/EPSS databases
+//	scanner db info                 — Show database information
+//	scanner db verify               — Run integrity check
+//	scanner db vacuum               — Optimize database
+//	scanner version                 — Show version information
 //
 // Dependency injection is wired here using the provided packages.
 package main
@@ -15,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -25,6 +27,7 @@ import (
 	"github.com/evilhunter/surfaceguard/internal/banner"
 	"github.com/evilhunter/surfaceguard/internal/config"
 	"github.com/evilhunter/surfaceguard/internal/database"
+	"github.com/evilhunter/surfaceguard/internal/easm"
 	"github.com/evilhunter/surfaceguard/internal/matcher"
 	"github.com/evilhunter/surfaceguard/internal/report"
 	"github.com/evilhunter/surfaceguard/internal/scanner"
@@ -66,7 +69,7 @@ services and matches them against known CVEs using safe fingerprinting technique
 The scanner NEVER exploits vulnerabilities, attempts authentication, or performs
 any destructive actions. It only identifies potential vulnerabilities based on
 detected versions and publicly available vulnerability intelligence.`,
-		Version: Version,
+		Version:      Version,
 		SilenceUsage: true,
 		// Show banner before any command runs.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -87,6 +90,7 @@ detected versions and publicly available vulnerability intelligence.`,
 	rootCmd.AddCommand(newDBCmd(cfg, logger))
 	rootCmd.AddCommand(newExportCmd(cfg, logger))
 	rootCmd.AddCommand(newVersionCmd())
+	rootCmd.AddCommand(newEASMCmd(cfg, logger))
 
 	return rootCmd.Execute()
 }
@@ -96,9 +100,9 @@ func showStartupBanner(cfg *config.Config, noBanner bool) {
 	dbPath, err := cfg.ResolveDatabasePath()
 	if err != nil {
 		banner.Display(banner.Info{
-			Version:   Version,
-			BuildDate: banner.DefaultBuildDate(),
-			DBVersion: "N/A",
+			Version:    Version,
+			BuildDate:  banner.DefaultBuildDate(),
+			DBVersion:  "N/A",
 			FeedStatus: "Unknown",
 		}, noBanner)
 		return
@@ -108,9 +112,9 @@ func showStartupBanner(cfg *config.Config, noBanner bool) {
 	db, err := database.NewSQLiteDatabase(context.Background(), dbPath)
 	if err != nil {
 		banner.Display(banner.Info{
-			Version:   Version,
-			BuildDate: banner.DefaultBuildDate(),
-			DBVersion: "N/A",
+			Version:    Version,
+			BuildDate:  banner.DefaultBuildDate(),
+			DBVersion:  "N/A",
 			FeedStatus: "Unknown",
 		}, noBanner)
 		return
@@ -120,9 +124,9 @@ func showStartupBanner(cfg *config.Config, noBanner bool) {
 	info, err := db.Info(context.Background())
 	if err != nil {
 		banner.Display(banner.Info{
-			Version:   Version,
-			BuildDate: banner.DefaultBuildDate(),
-			DBVersion: "N/A",
+			Version:    Version,
+			BuildDate:  banner.DefaultBuildDate(),
+			DBVersion:  "N/A",
 			FeedStatus: "Unknown",
 		}, noBanner)
 		return
@@ -611,6 +615,146 @@ func runDBVacuum(cfg *config.Config, logger *slog.Logger) error {
 // ============================================================================
 
 // ============================================================================
+// EASM Command
+// ============================================================================
+
+type easmFlags struct {
+	wordlist     string
+	ports        string
+	customPorts  string
+	screenshots  bool
+	workers      int
+	format       string
+	output       string
+	wordlistFile string
+}
+
+func newEASMCmd(cfg *config.Config, logger *slog.Logger) *cobra.Command {
+	f := &easmFlags{}
+
+	cmd := &cobra.Command{
+		Use:   "easm <target>",
+		Short: "External Attack Surface Management scan",
+		Long: `Discover external assets and assess their exposure.
+
+Runs the full EASM pipeline: passive subdomain discovery, optional DNS bruteforce,
+wildcard detection, DNS resolution, alive validation, port scanning, service
+fingerprinting, and CVE/KEV/EPSS correlation.
+
+Examples:
+  surfaceguard easm example.com
+  surfaceguard easm example.com --wordlist medium
+  surfaceguard easm 192.168.1.0/24 --ports full
+  surfaceguard easm example.com --wordlist custom --wordlist-file mylist.txt`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runEASM(cmd, cfg, logger, f, args[0])
+		},
+	}
+
+	cmd.Flags().StringVarP(&f.wordlist, "wordlist", "w", "passive", "Wordlist size: passive, small, medium, large, custom")
+	cmd.Flags().StringVar(&f.ports, "ports", "fast", "Port scan level: fast, full")
+	cmd.Flags().StringVar(&f.customPorts, "custom-ports", "", "Custom ports (when --ports=custom)")
+	cmd.Flags().BoolVar(&f.screenshots, "screenshots", false, "Enable screenshot capture (HTTP/HTTPS)")
+	cmd.Flags().IntVarP(&f.workers, "workers", "W", cfg.EASM.Workers, "Number of workers")
+	cmd.Flags().StringVarP(&f.format, "format", "f", "console", "Output format: console, json, html")
+	cmd.Flags().StringVarP(&f.output, "output", "o", "", "Write report to file")
+	cmd.Flags().StringVar(&f.wordlistFile, "wordlist-file", "", "Custom wordlist file path")
+
+	return cmd
+}
+
+func runEASM(cmd *cobra.Command, cfg *config.Config, logger *slog.Logger, f *easmFlags, target string) error {
+	ctx, cancel := signalContext()
+	defer cancel()
+
+	// Parse the target.
+	targetType, err := detectTargetType(target)
+	if err != nil {
+		return fmt.Errorf("invalid target: %w", err)
+	}
+
+	// Open database.
+	dbPath, err := cfg.ResolveDatabasePath()
+	if err != nil {
+		return fmt.Errorf("resolving database path: %w", err)
+	}
+	db, err := database.NewSQLiteDatabase(ctx, dbPath)
+	if err != nil {
+		return fmt.Errorf("opening database: %w", err)
+	}
+	defer db.Close()
+
+	// Create matcher and orchestrator.
+	m := matcher.New(db)
+	orch := easm.NewOrchestrator(cfg, db, m, logger)
+
+	// Build scan request.
+	req := models.EASMScanRequest{
+		Target:  target,
+		Workers: f.workers,
+		Ports:   models.EASMPortLevel(f.ports),
+	}
+	switch targetType {
+	case "domain":
+		req.ScanType = models.EASMScanDomain
+		req.Wordlist = models.EASMWordlistSize(f.wordlist)
+		if f.wordlistFile != "" {
+			req.Wordlist = models.EASMWordlistCustom
+		}
+	case "cidr":
+		req.ScanType = models.EASMScanCIDR
+		req.Wordlist = models.EASMWordlistPassive
+	case "ip":
+		req.ScanType = models.EASMScanIP
+		req.Wordlist = models.EASMWordlistPassive
+	}
+
+	// Run the EASM pipeline.
+	result, err := orch.Run(ctx, req, nil)
+	if err != nil {
+		return fmt.Errorf("EASM scan failed: %w", err)
+	}
+
+	// Print summary.
+	fmt.Println()
+	fmt.Println("========================================")
+	fmt.Printf("  EASM Scan Complete: %s\n", target)
+	fmt.Println("========================================")
+	fmt.Printf("  Status:      %s\n", result.Scan.Status)
+	fmt.Printf("  Assets:      %d total, %d alive\n", result.Scan.TotalAssets, result.Scan.AliveAssets)
+	fmt.Printf("  Services:    %d\n", result.Scan.TotalServices)
+	fmt.Printf("  CVEs Found:  %d (C:%d H:%d M:%d L:%d)\n",
+		result.Scan.TotalCVEs, result.Scan.CriticalCVEs,
+		result.Scan.HighCVEs, result.Scan.MediumCVEs, result.Scan.LowCVEs)
+	if result.Scan.KEVCVEs > 0 {
+		fmt.Printf("  KEV:         %d\n", result.Scan.KEVCVEs)
+	}
+	fmt.Println("========================================")
+	fmt.Println()
+
+	return nil
+}
+
+// detectTargetType determines whether the target is a domain, CIDR, or IP.
+func detectTargetType(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if strings.Contains(raw, "/") {
+		if _, _, err := net.ParseCIDR(raw); err == nil {
+			return "cidr", nil
+		}
+		return "", fmt.Errorf("invalid CIDR: %s", raw)
+	}
+	if net.ParseIP(raw) != nil {
+		return "ip", nil
+	}
+	if strings.Contains(raw, ".") {
+		return "domain", nil
+	}
+	return "", fmt.Errorf("unrecognized target: %s", raw)
+}
+
+// ============================================================================
 // Version Command
 // ============================================================================
 
@@ -667,7 +811,6 @@ func signalContext() (context.Context, context.CancelFunc) {
 		case <-ctx.Done():
 		}
 	}()
-
 
 	return ctx, cancel
 }

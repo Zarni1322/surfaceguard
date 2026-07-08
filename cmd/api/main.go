@@ -21,6 +21,7 @@ import (
 	"github.com/evilhunter/surfaceguard/internal/assessment/auth"
 	"github.com/evilhunter/surfaceguard/internal/config"
 	"github.com/evilhunter/surfaceguard/internal/database"
+	"github.com/evilhunter/surfaceguard/internal/easm"
 	"github.com/evilhunter/surfaceguard/internal/matcher"
 	"github.com/evilhunter/surfaceguard/pkg/models"
 )
@@ -505,6 +506,11 @@ func main() {
 	mux.HandleFunc("/api/assessment/history", handleAssessmentHistory)
 	mux.HandleFunc("/api/assets", handleAssets)
 	mux.HandleFunc("/api/asset", handleAsset)
+	mux.HandleFunc("/api/easm/scan", handleEASMScan)
+	mux.HandleFunc("/api/easm/scan/progress", handleEASMScanProgress)
+	mux.HandleFunc("/api/easm/scans", handleEASMScanList)
+	mux.HandleFunc("/api/easm/assets", handleEASMAssets)
+	mux.HandleFunc("/api/easm/findings", handleEASMFindings)
 
 	addr := ":8080"
 	fmt.Printf("SurfaceGuard API server on %s\n", addr)
@@ -1052,4 +1058,265 @@ func corsMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// ============================================================================
+// EASM API Handlers
+// ============================================================================
+
+var easmOrchestrator *easm.Orchestrator
+
+func initEASMEngine(cfg *config.Config, ctx context.Context) *easm.Orchestrator {
+	if easmOrchestrator != nil {
+		return easmOrchestrator
+	}
+	dbPath, err := cfg.ResolveDatabasePath()
+	if err != nil {
+		return nil
+	}
+	db, err := database.NewSQLiteDatabase(ctx, dbPath)
+	if err != nil {
+		return nil
+	}
+	m := matcher.New(db)
+	easmOrchestrator = easm.NewOrchestrator(cfg, db, m, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	return easmOrchestrator
+}
+
+func handleEASMScan(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	cfg := loadConfigOrPanic()
+	orch := initEASMEngine(cfg, ctx)
+	if orch == nil {
+		http.Error(w, "engine init failed", 500)
+		return
+	}
+
+	var req models.EASMScanRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	if req.Target == "" {
+		http.Error(w, "target is required", 400)
+		return
+	}
+	if req.Workers <= 0 {
+		req.Workers = cfg.EASM.Workers
+	}
+	if req.Ports == "" {
+		req.Ports = models.EASMPortFast
+	}
+
+	type scanResult struct {
+		result *easm.EASMResult
+		err    error
+	}
+	resultCh := make(chan scanResult, 1)
+	go func() {
+		res, err := orch.Run(ctx, req, nil)
+		resultCh <- scanResult{result: res, err: err}
+	}()
+
+	select {
+	case sr := <-resultCh:
+		if sr.err != nil {
+			writeJSON(w, map[string]interface{}{"status": "failed", "error": sr.err.Error()})
+			return
+		}
+		writeJSON(w, map[string]interface{}{"status": "completed", "scan_id": sr.result.ScanID, "scan": sr.result.Scan})
+	case <-ctx.Done():
+		writeJSON(w, map[string]interface{}{"status": "failed", "error": "request cancelled"})
+	}
+}
+
+func handleEASMScanProgress(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	cfg := loadConfigOrPanic()
+	orch := initEASMEngine(cfg, ctx)
+	if orch == nil {
+		http.Error(w, "engine init failed", 500)
+		return
+	}
+
+	var req models.EASMScanRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	if req.Target == "" {
+		http.Error(w, "target is required", 400)
+		return
+	}
+	if req.Workers <= 0 {
+		req.Workers = cfg.EASM.Workers
+	}
+	if req.Ports == "" {
+		req.Ports = models.EASMPortFast
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", 500)
+		return
+	}
+
+	sendProgress := func(step string, pct int, msg string) {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		data, _ := json.Marshal(models.EASMScanProgress{Step: step, Progress: pct, Message: msg})
+		fmt.Fprintf(w, "event: progress\ndata: %s\n\n", data)
+		flusher.Flush()
+	}
+
+	sendProgress("starting", 0, "Starting EASM scan...")
+	result, err := orch.Run(ctx, req, sendProgress)
+	if err != nil {
+		errData, _ := json.Marshal(map[string]string{"error": err.Error()})
+		fmt.Fprintf(w, "event: error\ndata: %s\n\n", errData)
+		flusher.Flush()
+		return
+	}
+	resultData, _ := json.Marshal(map[string]interface{}{"status": "completed", "scan": result.Scan})
+	fmt.Fprintf(w, "event: result\ndata: %s\n\n", resultData)
+	flusher.Flush()
+}
+
+func handleEASMScanList(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	cfg := loadConfigOrPanic()
+	dbPath, err := cfg.ResolveDatabasePath()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	db, err := database.NewSQLiteDatabase(ctx, dbPath)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer db.Close()
+	scans, err := db.EASMScan().List(ctx, 50)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	var result []models.EASMScan
+	for _, s := range scans {
+		result = append(result, *dbEASMScanToModel(&s))
+	}
+	writeJSON(w, result)
+}
+
+func handleEASMAssets(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	cfg := loadConfigOrPanic()
+	scanID, err := strconv.ParseInt(r.URL.Query().Get("scan_id"), 10, 64)
+	if err != nil {
+		http.Error(w, "scan_id required", 400)
+		return
+	}
+	dbPath, err := cfg.ResolveDatabasePath()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	db, err := database.NewSQLiteDatabase(ctx, dbPath)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer db.Close()
+	assets, err := db.EASMAsset().ListByScan(ctx, scanID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	var result []models.EASMAsset
+	for _, a := range assets {
+		result = append(result, *dbEASMAssetToModel(&a))
+	}
+	writeJSON(w, result)
+}
+
+func handleEASMFindings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	cfg := loadConfigOrPanic()
+	scanID, err := strconv.ParseInt(r.URL.Query().Get("scan_id"), 10, 64)
+	if err != nil {
+		http.Error(w, "scan_id required", 400)
+		return
+	}
+	dbPath, err := cfg.ResolveDatabasePath()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	db, err := database.NewSQLiteDatabase(ctx, dbPath)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer db.Close()
+	findings, err := db.EASMFinding().ListByScan(ctx, scanID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	var result []models.EASMFinding
+	for _, f := range findings {
+		result = append(result, *dbEASMFindingToModel(&f))
+	}
+	writeJSON(w, result)
+}
+
+func dbEASMScanToModel(s *database.DBEASMScan) *models.EASMScan {
+	startedAt, _ := time.Parse(time.RFC3339, s.StartedAt)
+	var completedAt *time.Time
+	if s.CompletedAt != "" {
+		t, err := time.Parse(time.RFC3339, s.CompletedAt)
+		if err == nil {
+			completedAt = &t
+		}
+	}
+	return &models.EASMScan{
+		ID: s.ID, Target: s.Target, ScanType: models.EASMScanType(s.ScanType),
+		Wordlist: models.EASMWordlistSize(s.Wordlist), Ports: models.EASMPortLevel(s.Ports),
+		StartedAt: startedAt, CompletedAt: completedAt, Duration: fmt.Sprintf("%dms", s.DurationMs),
+		Status: s.Status, TotalAssets: s.TotalAssets, AliveAssets: s.AliveAssets,
+		TotalServices: s.TotalServices, TotalCVEs: s.TotalCVEs,
+		CriticalCVEs: s.CriticalCVEs, HighCVEs: s.HighCVEs, MediumCVEs: s.MediumCVEs,
+		LowCVEs: s.LowCVEs, KEVCVEs: s.KEVCVEs, AvgEPSS: s.AvgEPSS, Error: s.ErrorMessage,
+	}
+}
+
+func dbEASMAssetToModel(a *database.DBEASMAsset) *models.EASMAsset {
+	return &models.EASMAsset{
+		ID: a.ID, ScanID: a.ScanID, Hostname: a.Hostname, IPAddress: a.IPAddress,
+		IPv6Address: a.IPv6Address, CNAME: a.CNAME, IsAlive: a.IsAlive == 1,
+		IsWildcard: a.IsWildcard == 1, Source: a.Source, AssetType: a.AssetType,
+	}
+}
+
+func dbEASMFindingToModel(f *database.DBEASMFinding) *models.EASMFinding {
+	return &models.EASMFinding{
+		ID: f.ID, ServiceID: f.ServiceID, ScanID: f.ScanID, CVEID: f.CVEID,
+		CVSSv3: f.CVSSv3, CVSSv2: f.CVSSv2, Severity: f.Severity, Description: f.Description,
+		IsKEV: f.IsKEV == 1, EPSSScore: f.EPSSScore, EPSSPercentile: f.EPSSPercentile,
+		MatchedCPE: f.MatchedCPE, MatchedVersion: f.MatchedVersion,
+	}
 }
