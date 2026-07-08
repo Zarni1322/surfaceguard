@@ -1,25 +1,35 @@
 // Package config provides YAML-based configuration with environment variable
 // overrides. It follows the principle that config should be:
-//   1. Version-controllable via configs/surfaceguard.yaml (defaults)
-//   2. Overridable via environment variables (deployment)
-//   3. Discoverable via --help flags (CLI)
+//  1. Version-controllable via configs/surfaceguard.yaml (defaults)
+//  2. Overridable via environment variables (deployment)
+//  3. Discoverable via --help flags (CLI)
 //
 // The Config struct is the single source of truth for all tunable parameters.
 package config
+
 import (
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-	"gopkg.in/yaml.v3"
 )
+
 // AssessmentConfig configures authenticated scanning.
 type AssessmentConfig struct {
 	SSHKeyDir   string `yaml:"ssh_key_dir"`
 	EncryptKey  string `yaml:"encryption_key"`
 	ConnTimeout string `yaml:"conn_timeout"`
+}
+
+// EASMConfig configures External Attack Surface Management.
+type EASMConfig struct {
+	Workers       int    `yaml:"workers"`
+	PortScanLevel string `yaml:"port_scan_level"` // fast, full
+	Screenshots   bool   `yaml:"screenshots"`
+	WordlistDir   string `yaml:"wordlist_dir"`
 }
 
 // Config holds all scanner configuration loaded from YAML + env overrides.
@@ -36,11 +46,14 @@ type Config struct {
 	Report ReportConfig `yaml:"report"`
 	// Assessment settings
 	Assessment AssessmentConfig `yaml:"assessment"`
+	// EASM settings
+	EASM EASMConfig `yaml:"easm"`
 	// Banner settings
 	ShowBanner bool `yaml:"show_banner"`
 	// Config file path (not from YAML, set programmatically)
 	configPath string
 }
+
 // ScanConfig configures port scanning behaviour.
 type ScanConfig struct {
 	// Default ports to scan (top N ports or comma-separated)
@@ -51,6 +64,7 @@ type ScanConfig struct {
 	Fingerprint bool          `yaml:"fingerprint"`
 	RateLimit   int           `yaml:"rate_limit"` // max packets per second (0=unlimited)
 }
+
 // DatabaseConfig configures the local SQLite database.
 type DatabaseConfig struct {
 	Path            string `yaml:"path"`
@@ -58,6 +72,7 @@ type DatabaseConfig struct {
 	MaxIdleConns    int    `yaml:"max_idle_conns"`
 	ConnMaxLifetime string `yaml:"conn_max_lifetime"`
 }
+
 // UpdateConfig configures CVE/CPE/KEV data feed downloads.
 type UpdateConfig struct {
 	Enabled       bool   `yaml:"enabled"`
@@ -72,23 +87,27 @@ type UpdateConfig struct {
 	Incremental   bool   `yaml:"incremental"`
 	DownloadsDir  string `yaml:"downloads_dir"`
 }
+
 // LoggingConfig configures structured logging.
 type LoggingConfig struct {
 	Level  string `yaml:"level"`  // debug, info, warn, error
 	Format string `yaml:"format"` // text, json
 }
+
 // ReportConfig configures report output.
 type ReportConfig struct {
-	DefaultFormat string `yaml:"default_format"` // console, json, html
-	HTMLTemplate  string `yaml:"html_template"`
+	DefaultFormat string  `yaml:"default_format"` // console, json, html
+	HTMLTemplate  string  `yaml:"html_template"`
 	CVSSThreshold float64 `yaml:"cvss_threshold"`
 }
+
 const (
 	// DefaultConfigPath is the default path to the YAML config file.
 	DefaultConfigPath = "configs/surfaceguard.yaml"
 	// EnvPrefix is the prefix for environment variable overrides.
 	EnvPrefix = "SURFACEGUARD_"
 )
+
 // DefaultConfig returns a Config populated with sensible defaults.
 func DefaultConfig() *Config {
 	return &Config{
@@ -128,14 +147,21 @@ func DefaultConfig() *Config {
 			HTMLTemplate:  "",
 			CVSSThreshold: 0.0,
 		},
-			Assessment: AssessmentConfig{
-				SSHKeyDir:   "ssh_keys",
-				EncryptKey:  "",
-				ConnTimeout: "10s",
-			},
+		Assessment: AssessmentConfig{
+			SSHKeyDir:   "ssh_keys",
+			EncryptKey:  "",
+			ConnTimeout: "10s",
+		},
+		EASM: EASMConfig{
+			Workers:       50,
+			PortScanLevel: "fast",
+			Screenshots:   false,
+			WordlistDir:   "assets/wordlists",
+		},
 		ShowBanner: true,
 	}
 }
+
 // LoadConfig reads configuration from the specified YAML file, applies
 // defaults for any missing fields, then overrides with environment variables.
 func LoadConfig(path string) (*Config, error) {
@@ -162,10 +188,12 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	return cfg, nil
 }
+
 // ConfigPath returns the path to the loaded config file.
 func (c *Config) ConfigPath() string {
 	return c.configPath
 }
+
 // applyEnvOverrides reads environment variables with the SURFACEGUARD_ prefix
 // and overrides corresponding config fields. Supports SURFACEGUARD_SCAN_WORKERS,
 // SURFACEGUARD_DATABASE_PATH, etc. and their underscore-delimited hierarchy.
@@ -225,6 +253,7 @@ func (c *Config) applyEnvOverrides() {
 		}
 	}
 }
+
 // validate checks that the configuration is internally consistent.
 func (c *Config) validate() error {
 	if c.Scan.Workers <= 0 {
@@ -258,6 +287,7 @@ func (c *Config) validate() error {
 	}
 	return nil
 }
+
 // ResolveDownloadsDir returns the absolute path to the downloads directory.
 func (c *Config) ResolveDownloadsDir() (string, error) {
 	if filepath.IsAbs(c.Update.DownloadsDir) {
@@ -276,6 +306,7 @@ func (c *Config) ResolveDatabasePath() (string, error) {
 	// so the database path is predictable regardless of config file location.
 	return filepath.Abs(c.Database.Path)
 }
+
 // TopPorts returns the list of ports to scan. If no ports configured,
 // returns the top 1000 common ports (delegated to caller for brevity here).
 func (c *Config) TopPorts() []int {
@@ -284,6 +315,7 @@ func (c *Config) TopPorts() []int {
 	}
 	return c.Scan.Ports
 }
+
 // defaultTopPorts returns the top 30 most commonly open ports.
 func defaultTopPorts() []int {
 	return []int{

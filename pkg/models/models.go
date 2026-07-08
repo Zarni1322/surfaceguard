@@ -473,6 +473,7 @@ type EASMAsset struct {
 type EASMService struct {
 	ID         int64  `json:"id"`
 	AssetID    int64  `json:"asset_id"`
+	Hostname   string `json:"hostname,omitempty"`
 	Port       int    `json:"port"`
 	Protocol   string `json:"protocol"`
 	Service    string `json:"service"`
