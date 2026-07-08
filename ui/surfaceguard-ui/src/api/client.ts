@@ -184,4 +184,12 @@ export async function getEASMFindings(scanId: number): Promise<EASMFinding[]> {
   return data;
 }
 
+export async function deleteEASMScans(): Promise<void> {
+  await api.delete("/easm/scans/delete");
+}
+
+export async function deleteAssessmentHistory(): Promise<void> {
+  await api.delete("/assessment/history/delete");
+}
+
 export default api;

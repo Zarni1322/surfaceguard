@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Globe, List, RefreshCw, Loader2, Activity } from "lucide-react";
-import { listEASMScans, createEASMScan } from "@/api/client";
+import { Globe, List, RefreshCw, Loader2, Activity, Trash2 } from "lucide-react";
+import { listEASMScans, createEASMScan, deleteEASMScans } from "@/api/client";
 import type { EASMScan } from "@/types";
 import { toast } from "sonner";
 import PageHeader from "@/components/PageHeader";
@@ -58,6 +58,16 @@ export default function EASMDashboard() {
     } finally { setScanning(false); }
   }
 
+  async function handleReset() {
+    if (scans.length === 0) { toast.info("No scans to reset"); return; }
+    if (!window.confirm("Reset all EASM scan history? This cannot be undone.")) return;
+    try {
+      await deleteEASMScans();
+      toast.success("EASM history reset");
+      setScans([]);
+    } catch { toast.error("Reset failed"); }
+  }
+
   function statusColor(status: string) {
     switch (status) {
       case "running": return "text-blue-400";
@@ -81,9 +91,14 @@ export default function EASMDashboard() {
       <div className={colSpan(12)}>
         <PageHeader title="External Attack Surface" description="Discover and assess externally exposed assets"
           actions={
-            <Button onClick={() => setShowForm(!showForm)} size="sm" className="bg-[#3B82F6]">
-              <Globe className="h-4 w-4 mr-1" />EASM Scan
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={handleReset} variant="outline" size="sm" className="border-red-500/30 text-red-400 hover:bg-red-500/10">
+                <Trash2 className="h-4 w-4 mr-1" />Reset
+              </Button>
+              <Button onClick={() => setShowForm(!showForm)} size="sm" className="bg-[#3B82F6]">
+                <Globe className="h-4 w-4 mr-1" />EASM Scan
+              </Button>
+            </div>
           } />
       </div>
 

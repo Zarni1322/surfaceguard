@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -504,11 +505,13 @@ func main() {
 	mux.HandleFunc("/api/assessment/scan", handleAssessmentScan)
 	mux.HandleFunc("/api/assessment/scan/progress", handleAssessmentScanSSE)
 	mux.HandleFunc("/api/assessment/history", handleAssessmentHistory)
+	mux.HandleFunc("/api/assessment/history/delete", handleAssessmentHistoryDelete)
 	mux.HandleFunc("/api/assets", handleAssets)
 	mux.HandleFunc("/api/asset", handleAsset)
 	mux.HandleFunc("/api/easm/scan", handleEASMScan)
 	mux.HandleFunc("/api/easm/scan/progress", handleEASMScanProgress)
 	mux.HandleFunc("/api/easm/scans", handleEASMScanList)
+	mux.HandleFunc("/api/easm/scans/delete", handleEASMScansDelete)
 	mux.HandleFunc("/api/easm/assets", handleEASMAssets)
 	mux.HandleFunc("/api/easm/findings", handleEASMFindings)
 
@@ -1223,7 +1226,7 @@ func handleEASMScanList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	var result []models.EASMScan
+	result := make([]models.EASMScan, 0, len(scans))
 	for _, s := range scans {
 		result = append(result, *dbEASMScanToModel(&s))
 	}
@@ -1290,6 +1293,68 @@ func handleEASMFindings(w http.ResponseWriter, r *http.Request) {
 		result = append(result, *dbEASMFindingToModel(&f))
 	}
 	writeJSON(w, result)
+}
+
+func handleEASMScansDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "DELETE" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	ctx := r.Context()
+	cfg := loadConfigOrPanic()
+	dbPath, err := cfg.ResolveDatabasePath()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	db, err := database.NewSQLiteDatabase(ctx, dbPath)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer db.Close()
+
+	scans, err := db.EASMScan().List(ctx, 9999)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	deleted := 0
+	for _, s := range scans {
+		if err := db.EASMScan().Delete(ctx, s.ID); err == nil {
+			deleted++
+		}
+	}
+	writeJSON(w, map[string]interface{}{"status": "ok", "deleted": deleted})
+}
+
+func handleAssessmentHistoryDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "DELETE" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	ctx := r.Context()
+	cfg := loadConfigOrPanic()
+	dbPath, err := cfg.ResolveDatabasePath()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	rawDB, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer rawDB.Close()
+
+	rawDB.ExecContext(ctx, "DELETE FROM security_findings")
+	rawDB.ExecContext(ctx, "DELETE FROM assessment_results")
+	rawDB.ExecContext(ctx, "DELETE FROM credential_validations")
+	rawDB.ExecContext(ctx, "DELETE FROM installed_packages")
+	rawDB.ExecContext(ctx, "DELETE FROM installed_software")
+	rawDB.ExecContext(ctx, "DELETE FROM asset_inventory")
+	writeJSON(w, map[string]interface{}{"status": "ok"})
 }
 
 func dbEASMScanToModel(s *database.DBEASMScan) *models.EASMScan {
