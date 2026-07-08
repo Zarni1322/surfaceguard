@@ -10,18 +10,34 @@ import { formatDate } from "@/lib/utils";
 // Module-level ref that survives page navigation
 let persistentES: EventSource | null = null;
 
+const SS_KEY = "update_state";
+
+function loadUpdState() {
+  try { const r = sessionStorage.getItem(SS_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+}
+
+function saveUpdState(s: Record<string, unknown>) {
+  try { sessionStorage.setItem(SS_KEY, JSON.stringify(s)); } catch {}
+}
+
 export default function UpdatesPage() {
+  const saved = loadUpdState();
   const { data: dbInfo, isLoading, refetch } = useDbInfo();
-  const [updating, setUpdating] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [progressText, setProgressText] = useState("");
-  const [phase, setPhase] = useState("idle");
+  const [updating, setUpdating] = useState(saved?.updating || false);
+  const [progress, setProgress] = useState(saved?.progress || 0);
+  const [progressText, setProgressText] = useState(saved?.progressText || "");
+  const [phase, setPhase] = useState(saved?.phase || "idle");
+
+  function upd(s: Record<string, unknown>) {
+    if (s.updating !== undefined) setUpdating(s.updating as boolean);
+    if (s.progress !== undefined) setProgress(s.progress as number);
+    if (s.progressText !== undefined) setProgressText(s.progressText as string);
+    if (s.phase !== undefined) setPhase(s.phase as string);
+    saveUpdState({ updating: s.updating ?? updating, progress: s.progress ?? progress, progressText: s.progressText ?? progressText, phase: s.phase ?? phase });
+  }
 
   const handleUpdate = () => {
-    setUpdating(true);
-    setProgress(0);
-    setProgressText("Starting update...");
-    setPhase("downloading");
+    upd({ updating: true, progress: 0, progressText: "Starting update...", phase: "downloading" });
 
     const es = new EventSource("/api/update");
     persistentES = es;
@@ -29,28 +45,17 @@ export default function UpdatesPage() {
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === "progress") {
-          setProgress(data.percent);
-          setProgressText(data.text);
-        } else if (data.type === "result" && data.status === "completed") {
-          setProgress(100);
-          setProgressText("Update complete");
-          setPhase("complete");
-          setUpdating(false);
-          es.close();
-          refetch();
-          toast.success("All feeds updated");
+        if (data.type === "progress") { upd({ progress: data.percent, progressText: data.text }); }
+        else if (data.type === "result" && data.status === "completed") {
+          upd({ progress: 100, progressText: "Update complete", phase: "complete", updating: false });
+          es.close(); refetch(); toast.success("All feeds updated");
         }
-      } catch (e) {
-        // ignore parse errors
-      }
+      } catch { /* ignore */ }
     };
 
     es.onerror = () => {
-      // If we got to 100%, it was a clean completion
       if (progress >= 100) return;
-      setProgressText("Connection lost — update may still be running");
-      setUpdating(false);
+      upd({ progressText: "Connection lost — update may still be running", updating: false });
       es.close();
     };
   };

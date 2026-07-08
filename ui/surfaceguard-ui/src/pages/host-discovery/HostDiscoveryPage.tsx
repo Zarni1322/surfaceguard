@@ -11,21 +11,37 @@ import EmptyState from "@/components/EmptyState";
 // Module-level ref that survives page navigation (component unmount/remount)
 let persistentES: EventSource | null = null;
 
+const SS_KEY = "hostdisc_state";
+
+function loadHostState() {
+  try { const r = sessionStorage.getItem(SS_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+}
+
+function saveHostState(s: Record<string, unknown>) {
+  try { sessionStorage.setItem(SS_KEY, JSON.stringify(s)); } catch {}
+}
+
 export default function HostDiscoveryPage() {
+  const saved = loadHostState();
   const [network, setNetwork] = useState("");
-  const [scanning, setScanning] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [progressText, setProgressText] = useState("");
-  const [hosts, setHosts] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(saved?.scanning || false);
+  const [progress, setProgress] = useState(saved?.progress || 0);
+  const [progressText, setProgressText] = useState(saved?.progressText || "");
+  const [hosts, setHosts] = useState<string[]>(saved?.hosts || []);
+  const [error, setError] = useState<string | null>(saved?.error || null);
+
+  function upd(s: Record<string, unknown>) {
+    if (s.scanning !== undefined) setScanning(s.scanning as boolean);
+    if (s.progress !== undefined) setProgress(s.progress as number);
+    if (s.progressText !== undefined) setProgressText(s.progressText as string);
+    if (s.hosts !== undefined) setHosts(s.hosts as string[]);
+    if (s.error !== undefined) setError(s.error as string | null);
+    saveHostState({ scanning: s.scanning ?? scanning, progress: s.progress ?? progress, progressText: s.progressText ?? progressText, hosts: s.hosts ?? hosts, error: s.error ?? error });
+  }
 
   const handleScan = () => {
     if (!network.trim()) return;
-    setScanning(true);
-    setProgress(0);
-    setProgressText("Starting host discovery...");
-    setHosts([]);
-    setError(null);
+    upd({ scanning: true, progress: 0, progressText: "Starting host discovery...", hosts: [], error: null });
 
     const params = new URLSearchParams({ target: network.trim() });
     const es = new EventSource(`/api/host-discovery?${params}`);
@@ -34,25 +50,15 @@ export default function HostDiscoveryPage() {
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === "progress") {
-          setProgress(data.percent);
-          setProgressText(data.text);
-        } else if (data.type === "result") {
-          setHosts(data.hosts || []);
-          setProgress(100);
-          setProgressText(`Found ${data.count} live host(s)`);
-          setScanning(false);
+        if (data.type === "progress") { upd({ progress: data.percent, progressText: data.text }); }
+        else if (data.type === "result") {
+          upd({ hosts: data.hosts || [], progress: 100, progressText: `Found ${data.count} live host(s)`, scanning: false });
           es.close();
           toast.success(`Discovery complete — ${data.count} host(s) found`);
-        } else if (data.type === "error") {
-          setError(data.message);
-          setScanning(false);
-          es.close();
-          toast.error(data.message);
-        }
+        } else if (data.type === "error") { upd({ error: data.message, scanning: false }); es.close(); toast.error(data.message); }
       } catch (_) {}
     };
-    es.onerror = () => { setError("Connection lost"); setScanning(false); es.close(); };
+    es.onerror = () => { upd({ error: "Connection lost", scanning: false }); es.close(); };
   };
 
   return (
