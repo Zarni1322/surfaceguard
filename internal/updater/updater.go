@@ -56,12 +56,17 @@ func New(cfg *config.UpdateConfig, db database.Database, logger *slog.Logger) *U
 	if timeout <= 0 {
 		timeout = 120 * time.Second
 	}
+	// NVD API pagination across 3600+ pages needs a robust timeout.
+	fetchTimeout := timeout
+	if fetchTimeout < 600*time.Second {
+		fetchTimeout = 600 * time.Second
+	}
 	dlClient := &http.Client{Timeout: 0} // streaming downloads; ctx cancels
 	return &Updater{
 		cfg:        cfg,
 		downloads:  cfg.DownloadsDir,
 		db:         db,
-		client:     &http.Client{Timeout: timeout},
+		client:     &http.Client{Timeout: fetchTimeout},
 		logger:     logger,
 		checkpoint: newCheckpointManager(db.Checkpoint()),
 		dl:         newDownloader(cfg, dlClient),
@@ -427,13 +432,11 @@ func (u *Updater) updateCVE(ctx context.Context, lastUpdate string) (int, int, e
 		if progress < 50 {
 			bar += ">"
 		}
-		fmt.Printf("\r  NVD: [%-50s] %.0f%% (%d of %d pages)", bar, pct, page+1, (resp.TotalResults+99)/100)
+		fmt.Printf("\r  NVD: [%-50s] %.0f%% (page %d/%d, %d inserted)", bar, pct, page+1, (resp.TotalResults+99)/100, inserted)
 		page++
 
-		// Save progress checkpoint every 10 pages.
-		if page%10 == 0 {
-			u.checkpoint.Save(ctx, FeedNVD, StateDownloading, StepDownloading, int64(si+100), "", "", "in progress")
-		}
+		// Save progress checkpoint every page for granular resume support.
+		u.checkpoint.Save(ctx, FeedNVD, StateDownloading, StepDownloading, int64(si+100), "", "", "in progress")
 
 		if si+100 >= resp.TotalResults {
 			break
@@ -441,6 +444,7 @@ func (u *Updater) updateCVE(ctx context.Context, lastUpdate string) (int, int, e
 	}
 
 	fmt.Println()
+	fmt.Printf("  NVD: Import complete — %d inserted, %d updated\n", inserted, updated)
 	u.checkpoint.MarkCompleted(ctx, FeedNVD)
 	u.recordHistory(start, FeedNVD, "success", inserted, updated, nil, u.db)
 	return inserted, updated, nil
