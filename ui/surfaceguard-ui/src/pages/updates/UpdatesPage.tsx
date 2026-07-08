@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,13 +7,15 @@ import { RefreshCw, Loader2, Database, CheckCircle2, AlertCircle } from "lucide-
 import { useDbInfo } from "@/hooks/useApi";
 import { formatDate } from "@/lib/utils";
 
+// Module-level ref that survives page navigation
+let persistentES: EventSource | null = null;
+
 export default function UpdatesPage() {
   const { data: dbInfo, isLoading, refetch } = useDbInfo();
   const [updating, setUpdating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressText, setProgressText] = useState("");
   const [phase, setPhase] = useState("idle");
-  const eventSourceRef = useRef<EventSource | null>(null);
 
   const handleUpdate = () => {
     setUpdating(true);
@@ -22,7 +24,7 @@ export default function UpdatesPage() {
     setPhase("downloading");
 
     const es = new EventSource("/api/update");
-    eventSourceRef.current = es;
+    persistentES = es;
 
     es.onmessage = (event) => {
       try {
@@ -52,12 +54,6 @@ export default function UpdatesPage() {
       es.close();
     };
   };
-
-  useEffect(() => {
-    return () => {
-      if (eventSourceRef.current) eventSourceRef.current.close();
-    };
-  }, []);
 
   const lastUpdate = dbInfo?.last_updated ? formatDate(dbInfo.last_updated) : "Unknown";
   const feedStatus = updating ? "updating" : (dbInfo?.cve_count ? "up-to-date" : "unknown");

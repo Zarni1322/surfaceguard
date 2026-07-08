@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,9 @@ import PageHeader from "@/components/PageHeader";
 import PageContainer, { colSpan } from "@/components/PageContainer";
 import EmptyState from "@/components/EmptyState";
 
+// Module-level ref that survives page navigation (component unmount/remount)
+let persistentES: EventSource | null = null;
+
 export default function HostDiscoveryPage() {
   const [network, setNetwork] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -15,7 +18,6 @@ export default function HostDiscoveryPage() {
   const [progressText, setProgressText] = useState("");
   const [hosts, setHosts] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const esRef = useRef<EventSource | null>(null);
 
   const handleScan = () => {
     if (!network.trim()) return;
@@ -27,7 +29,7 @@ export default function HostDiscoveryPage() {
 
     const params = new URLSearchParams({ target: network.trim() });
     const es = new EventSource(`/api/host-discovery?${params}`);
-    esRef.current = es;
+    persistentES = es;
 
     es.onmessage = (event) => {
       try {
@@ -52,8 +54,6 @@ export default function HostDiscoveryPage() {
     };
     es.onerror = () => { setError("Connection lost"); setScanning(false); es.close(); };
   };
-
-  useEffect(() => () => { if (esRef.current) esRef.current.close(); }, []);
 
   return (
     <PageContainer>
