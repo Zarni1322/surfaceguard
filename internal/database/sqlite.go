@@ -36,21 +36,21 @@ var _ Database = (*sqliteDB)(nil)
 type sqliteDB struct {
 	db *sql.DB
 
-	vendorRepo             *sqliteVendorRepo
-	productRepo            *sqliteProductRepo
-	cpeRepo                *sqliteCPERepo
-	cveRepo                *sqliteCVERepo
-	kevRepo                *sqliteKEVRepo
-	epssRepo               *sqliteEPSSRepo
-	metaRepo               *sqliteMetadataRepo
-	checkpointRepo         *sqliteCheckpointRepo
-	credProfileRepo        *sqliteCredentialProfileRepo
-	assetRepo              *sqliteAssetInventoryRepo
-	assessResultRepo       *sqliteAssessmentResultRepo
-	pkgRepo                *sqliteInstalledPackageRepo
-	swRepo                 *sqliteInstalledSoftwareRepo
-	secFindingRepo         *sqliteSecurityFindingRepo
-	credValidationRepo     *sqliteCredentialValidationRepo
+	vendorRepo         *sqliteVendorRepo
+	productRepo        *sqliteProductRepo
+	cpeRepo            *sqliteCPERepo
+	cveRepo            *sqliteCVERepo
+	kevRepo            *sqliteKEVRepo
+	epssRepo           *sqliteEPSSRepo
+	metaRepo           *sqliteMetadataRepo
+	checkpointRepo     *sqliteCheckpointRepo
+	credProfileRepo    *sqliteCredentialProfileRepo
+	assetRepo          *sqliteAssetInventoryRepo
+	assessResultRepo   *sqliteAssessmentResultRepo
+	pkgRepo            *sqliteInstalledPackageRepo
+	swRepo             *sqliteInstalledSoftwareRepo
+	secFindingRepo     *sqliteSecurityFindingRepo
+	credValidationRepo *sqliteCredentialValidationRepo
 
 	mu sync.RWMutex
 }
@@ -71,7 +71,7 @@ func NewSQLiteDatabase(ctx context.Context, path string) (Database, error) {
 		"PRAGMA synchronous=NORMAL",
 		"PRAGMA foreign_keys=ON",
 		"PRAGMA busy_timeout=5000",
-		"PRAGMA cache_size=-8000",       // 8MB cache
+		"PRAGMA cache_size=-8000", // 8MB cache
 		"PRAGMA temp_store=MEMORY",
 	}
 	for _, pragma := range pragmas {
@@ -147,20 +147,20 @@ func (s *sqliteDB) migrate(ctx context.Context) error {
 // Repository accessors
 // ============================================================================
 
-func (s *sqliteDB) Vendor() VendorRepository                   { return s.vendorRepo }
-func (s *sqliteDB) Product() ProductRepository                 { return s.productRepo }
-func (s *sqliteDB) CPE() CPERepository                         { return s.cpeRepo }
-func (s *sqliteDB) CVE() CVERepository                         { return s.cveRepo }
-func (s *sqliteDB) KEV() KEVRepository                         { return s.kevRepo }
-func (s *sqliteDB) EPSS() EPSSRepository                       { return s.epssRepo }
-func (s *sqliteDB) Metadata() MetadataRepository               { return s.metaRepo }
-func (s *sqliteDB) Checkpoint() CheckpointRepository           { return s.checkpointRepo }
-func (s *sqliteDB) CredentialProfile() CredentialProfileRepository    { return s.credProfileRepo }
-func (s *sqliteDB) AssetInventory() AssetInventoryRepository          { return s.assetRepo }
-func (s *sqliteDB) AssessmentResult() AssessmentResultRepository      { return s.assessResultRepo }
-func (s *sqliteDB) InstalledPackage() InstalledPackageRepository      { return s.pkgRepo }
-func (s *sqliteDB) InstalledSoftware() InstalledSoftwareRepository    { return s.swRepo }
-func (s *sqliteDB) SecurityFinding() SecurityFindingRepository        { return s.secFindingRepo }
+func (s *sqliteDB) Vendor() VendorRepository                             { return s.vendorRepo }
+func (s *sqliteDB) Product() ProductRepository                           { return s.productRepo }
+func (s *sqliteDB) CPE() CPERepository                                   { return s.cpeRepo }
+func (s *sqliteDB) CVE() CVERepository                                   { return s.cveRepo }
+func (s *sqliteDB) KEV() KEVRepository                                   { return s.kevRepo }
+func (s *sqliteDB) EPSS() EPSSRepository                                 { return s.epssRepo }
+func (s *sqliteDB) Metadata() MetadataRepository                         { return s.metaRepo }
+func (s *sqliteDB) Checkpoint() CheckpointRepository                     { return s.checkpointRepo }
+func (s *sqliteDB) CredentialProfile() CredentialProfileRepository       { return s.credProfileRepo }
+func (s *sqliteDB) AssetInventory() AssetInventoryRepository             { return s.assetRepo }
+func (s *sqliteDB) AssessmentResult() AssessmentResultRepository         { return s.assessResultRepo }
+func (s *sqliteDB) InstalledPackage() InstalledPackageRepository         { return s.pkgRepo }
+func (s *sqliteDB) InstalledSoftware() InstalledSoftwareRepository       { return s.swRepo }
+func (s *sqliteDB) SecurityFinding() SecurityFindingRepository           { return s.secFindingRepo }
 func (s *sqliteDB) CredentialValidation() CredentialValidationRepository { return s.credValidationRepo }
 
 // Info returns aggregate database statistics.
@@ -591,6 +591,25 @@ func (r *sqliteCVERepo) SearchByProduct(ctx context.Context, vendor, product str
 	return scanCVEs(rows)
 }
 
+// SearchByProductName returns all CVEs matching a product name alone,
+// ignoring the vendor. This is the fallback when the vendor is unknown.
+func (r *sqliteCVERepo) SearchByProductName(ctx context.Context, product string) ([]DBCVE, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT cv.id, cv.cve_id, cv.cpe_id, cv.description, cv.cvss_v2, cv.cvss_v3,
+			cv.severity, cv.published_date, cv.last_modified_date, cv.references_json
+		FROM cves cv
+		JOIN cpe c ON c.id = cv.cpe_id
+		JOIN products p ON p.id = c.product_id
+		WHERE LOWER(p.name) = ?
+		ORDER BY cv.cvss_v3 DESC NULLS LAST
+	`, strings.ToLower(product))
+	if err != nil {
+		return nil, fmt.Errorf("search cve by product name: %w", err)
+	}
+	defer rows.Close()
+	return scanCVEs(rows)
+}
+
 func (r *sqliteCVERepo) Count(ctx context.Context) (int, error) {
 	var count int
 	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM cves").Scan(&count)
@@ -938,7 +957,6 @@ func (r *sqliteCheckpointRepo) DeleteAll(ctx context.Context) error {
 	return err
 }
 
-
 // ============================================================================
 // Credential Profile Repository
 // ============================================================================
@@ -1133,7 +1151,7 @@ type sqliteInstalledPackageRepo struct{ db *sql.DB }
 func (r *sqliteInstalledPackageRepo) Upsert(ctx context.Context, p *DBInstalledPackage) (int64, error) {
 	res, err := r.db.ExecContext(ctx, `INSERT INTO installed_packages (asset_id, name, version, arch, cpe_2_3_uri, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 		ON CONFLICT(asset_id, name, arch) DO UPDATE SET version=excluded.version, cpe_2_3_uri=excluded.cpe_2_3_uri, status='installed', updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')`,
-		p.AssetID, p.Name, p.Version, p.Arch, p.CPE23URI)
+		p.AssetID, p.Name, p.Version, p.Arch, p.CPE23URI, p.Status)
 	if err != nil {
 		return 0, err
 	}

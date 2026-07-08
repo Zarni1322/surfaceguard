@@ -214,6 +214,13 @@ export interface AssessmentResult {
   status: string;
 }
 
+// ScanProgress represents a real-time progress event from the assessment SSE endpoint.
+export interface ScanProgress {
+  step: string;     // connecting, collecting, packages, cves, done, failed
+  progress: number; // 0.0–100.0
+  message: string;  // human-readable status message
+}
+
 export interface AssetDetail {
   id: number;
   hostname: string;

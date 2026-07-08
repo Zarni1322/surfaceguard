@@ -20,6 +20,10 @@ import (
 	"github.com/evilhunter/surfaceguard/pkg/models"
 )
 
+// ProgressFn is a callback invoked during RunAssessment to report progress.
+// step is the current phase name, pct is 0.0–100.0, and msg is a human-readable description.
+type ProgressFn func(step string, pct float64, msg string)
+
 // Engine orchestrates the full assessment workflow.
 type Engine struct {
 	cfg       *config.AssessmentConfig
@@ -34,11 +38,11 @@ type Engine struct {
 // NewEngine creates an assessment engine.
 func NewEngine(cfg *config.AssessmentConfig, db database.Database, m *matcher.Matcher, logger *slog.Logger) *Engine {
 	e := &Engine{
-		cfg:       cfg,
-		db:        db,
-		matcher:   m,
-		inventory: inventory.NewManager(db),
-		logger:    logger,
+		cfg:        cfg,
+		db:         db,
+		matcher:    m,
+		inventory:  inventory.NewManager(db),
+		logger:     logger,
 		connectors: make(map[models.Protocol]auth.Connector),
 	}
 
@@ -254,7 +258,20 @@ func (e *Engine) validateWindows(ctx context.Context, session auth.Session, resu
 // ============================================================================
 
 // RunAssessment performs a full authenticated assessment of the target.
+// It is a convenience wrapper around RunAssessmentWithProgress without callbacks.
 func (e *Engine) RunAssessment(ctx context.Context, profileID int64) (*models.AssessmentResult, error) {
+	return e.RunAssessmentWithProgress(ctx, profileID, nil)
+}
+
+// RunAssessmentWithProgress performs a full authenticated assessment and reports
+// progress via the optional callback. The callback is called with the current
+// step name, percentage (0.0–100.0), and a human-readable message.
+func (e *Engine) RunAssessmentWithProgress(ctx context.Context, profileID int64, progress ProgressFn) (*models.AssessmentResult, error) {
+	if progress == nil {
+		progress = func(string, float64, string) {} // no-op
+	}
+
+	progress("connecting", 5, "Getting credential profile...")
 	profile, err := e.GetProfile(ctx, profileID)
 	if err != nil {
 		return nil, fmt.Errorf("get profile: %w", err)
@@ -278,6 +295,7 @@ func (e *Engine) RunAssessment(ctx context.Context, profileID int64) (*models.As
 	}
 
 	// Connect.
+	progress("connecting", 10, "Connecting to target...")
 	session, err := connector.Connect(ctx, profile)
 	if err != nil {
 		result.Status = "failed"
@@ -288,6 +306,7 @@ func (e *Engine) RunAssessment(ctx context.Context, profileID int64) (*models.As
 	// Collect data based on protocol.
 	switch profile.Protocol {
 	case models.ProtocolSSH:
+		progress("collecting", 20, "Collecting system information...")
 		asset, packages, findings, err := e.collectLinux(ctx, session)
 		if err != nil {
 			result.Status = "failed"
@@ -298,9 +317,11 @@ func (e *Engine) RunAssessment(ctx context.Context, profileID int64) (*models.As
 		result.Findings = findings
 
 		// CVE correlate packages.
-		result.CVEs = e.correlatePackages(ctx, packages)
+		progress("cves", 30, fmt.Sprintf("Correlating %d packages against CVE database...", len(packages)))
+		result.CVEs = e.correlatePackagesWithProgress(ctx, packages, progress)
 
 	case models.ProtocolWinRM:
+		progress("collecting", 20, "Collecting Windows system information...")
 		asset, software, findings, err := e.collectWindows(ctx, session)
 		if err != nil {
 			result.Status = "failed"
@@ -311,9 +332,11 @@ func (e *Engine) RunAssessment(ctx context.Context, profileID int64) (*models.As
 		result.Findings = findings
 
 		// CVE correlate software.
+		progress("cves", 30, fmt.Sprintf("Correlating %d software entries against CVE database...", len(software)))
 		result.CVEs = e.correlateSoftware(ctx, software)
 
 	case models.ProtocolSNMP:
+		progress("collecting", 20, "Collecting network device information...")
 		asset, findings, err := e.collectNetwork(ctx, session)
 		if err != nil {
 			result.Status = "failed"
@@ -324,6 +347,7 @@ func (e *Engine) RunAssessment(ctx context.Context, profileID int64) (*models.As
 	}
 
 	// Calculate risk score.
+	progress("scoring", 95, "Calculating risk score...")
 	riskScore := 0.0
 	for _, cve := range result.CVEs {
 		if cve.CVSSv3 != nil {
@@ -338,14 +362,60 @@ func (e *Engine) RunAssessment(ctx context.Context, profileID int64) (*models.As
 	result.Status = "completed"
 
 	// Save to inventory.
+	progress("saving", 98, "Saving results to inventory...")
 	e.saveAssessmentToInventory(ctx, result)
 
+	progress("done", 100, "Assessment complete")
 	return result, nil
 }
 
 func (e *Engine) collectLinux(ctx context.Context, session auth.Session) (*models.AssetInfo, []models.InstalledPackage, []models.SecurityFinding, error) {
 	c := collector.NewLinuxCollector(session)
-	return c.CollectAll(ctx)
+	asset, packages, findings, err := c.CollectAll(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Add the Linux kernel as a synthetic package for CVE correlation.
+	// The kernel version comes from "uname -r" (e.g. "6.18.12+kali-amd64").
+	// We strip the distro suffix to get the base kernel version.
+	if asset != nil && asset.KernelVersion != "" {
+		kernelVer := stripKernelSuffix(asset.KernelVersion)
+		// Generate a proper CPE URI: cpe:2.3:o:linux:linux_kernel:{version}
+		cpeURI := fmt.Sprintf("cpe:2.3:o:linux:linux_kernel:%s:*:*:*:*:*:*:*", kernelVer)
+		packages = append(packages, models.InstalledPackage{
+			Name:     "linux-kernel",
+			Version:  kernelVer,
+			Status:   "installed",
+			CPE23URI: cpeURI,
+		})
+		// Also add a wildcard-version CPE so the matcher can find
+		// product-line CVEs even if the exact version isn't in the DB.
+		wildcardCPE := fmt.Sprintf("cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*")
+		packages = append(packages, models.InstalledPackage{
+			Name:     "linux-kernel-wildcard",
+			Version:  "*",
+			Status:   "installed",
+			CPE23URI: wildcardCPE,
+		})
+	}
+
+	return asset, packages, findings, nil
+}
+
+// stripKernelSuffix removes the distribution-specific suffix from a kernel
+// version string. Examples:
+//
+//	"6.18.12+kali-amd64"   → "6.18.12"
+//	"5.15.0-91-generic"    → "5.15.0"
+//	"6.1.57-1-default"     → "6.1.57"
+func stripKernelSuffix(version string) string {
+	// Take just the part before any "+" or "-" suffix.
+	// This gives us the clean X.Y.Z (or X.Y) kernel version.
+	if idx := strings.IndexAny(version, "+-"); idx > 0 {
+		return version[:idx]
+	}
+	return version
 }
 
 func (e *Engine) collectWindows(ctx context.Context, session auth.Session) (*models.AssetInfo, []models.InstalledSoftware, []models.SecurityFinding, error) {
@@ -360,12 +430,35 @@ func (e *Engine) collectNetwork(ctx context.Context, session auth.Session) (*mod
 
 // correlatePackages matches installed packages against the CVE database.
 func (e *Engine) correlatePackages(ctx context.Context, packages []models.InstalledPackage) []models.CVE {
+	return e.correlatePackagesWithProgress(ctx, packages, nil)
+}
+
+// correlatePackagesWithProgress matches installed packages against the CVE database,
+// reporting progress for long-running operations.
+func (e *Engine) correlatePackagesWithProgress(ctx context.Context, packages []models.InstalledPackage, progress ProgressFn) []models.CVE {
 	seen := make(map[string]bool)
 	var cves []models.CVE
 
-	for _, pkg := range packages {
+	total := len(packages)
+	reportInterval := 50
+	if total > 1000 {
+		reportInterval = total / 20 // report ~20 times
+	}
+	if reportInterval < 1 {
+		reportInterval = 1
+	}
+
+	for i, pkg := range packages {
 		if pkg.CPE23URI == "" {
 			continue
+		}
+		// Report progress periodically.
+		if progress != nil && i > 0 && i%reportInterval == 0 {
+			pct := 30.0 + (float64(i)/float64(total))*60.0
+			if pct > 95 {
+				pct = 95
+			}
+			progress("cves", pct, fmt.Sprintf("Correlating packages (%d/%d)...", i, total))
 		}
 		cpe := models.CPE{}
 		if parts := strings.SplitN(pkg.CPE23URI, ":", 7); len(parts) >= 6 {
@@ -385,6 +478,9 @@ func (e *Engine) correlatePackages(ctx context.Context, packages []models.Instal
 				cves = append(cves, f.CVE)
 			}
 		}
+	}
+	if progress != nil {
+		progress("cves", 95, fmt.Sprintf("CVE correlation complete (%d CVEs found)", len(cves)))
 	}
 	return cves
 }
@@ -587,4 +683,3 @@ func (e *Engine) saveAssessmentToInventory(ctx context.Context, result *models.A
 func (e *Engine) updateRiskScore(ctx context.Context, assetID int64, score float64) error {
 	return e.db.AssetInventory().UpdateRiskScore(ctx, assetID, score)
 }
-

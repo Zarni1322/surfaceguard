@@ -52,20 +52,31 @@ func main() {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
 		db := openDB(cfg, ctx, w)
-		if db == nil { return }
+		if db == nil {
+			return
+		}
 		defer db.Close()
 		info, err := db.Info(ctx)
-		if err != nil { http.Error(w, err.Error(), 500); return }
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
 		writeJSON(w, info)
 	})
 
 	// Host Discovery — fast TCP ping sweep
 	mux.HandleFunc("/api/host-discovery", func(w http.ResponseWriter, r *http.Request) {
 		target := r.URL.Query().Get("target")
-		if target == "" { http.Error(w, "target required", 400); return }
+		if target == "" {
+			http.Error(w, "target required", 400)
+			return
+		}
 
 		flusher, ok := w.(http.Flusher)
-		if !ok { http.Error(w, "streaming not supported", 500); return }
+		if !ok {
+			http.Error(w, "streaming not supported", 500)
+			return
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
@@ -77,7 +88,9 @@ func main() {
 			flusher.Flush()
 			alive := fastPing(target)
 			hosts := []string{}
-			if alive { hosts = append(hosts, target) }
+			if alive {
+				hosts = append(hosts, target)
+			}
 			fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "result", "hosts": hosts, "count": len(hosts)}))
 			flusher.Flush()
 			return
@@ -93,7 +106,9 @@ func main() {
 
 		// For subnets larger than /24, report progress in batches
 		batchSize := 10
-		if total > 256 { batchSize = 100 }
+		if total > 256 {
+			batchSize = 100
+		}
 
 		var mu sync.Mutex
 		var wg sync.WaitGroup
@@ -142,10 +157,16 @@ func main() {
 	mux.HandleFunc("/api/cve-discovery", func(w http.ResponseWriter, r *http.Request) {
 		target := r.URL.Query().Get("target")
 		ports := r.URL.Query().Get("ports")
-		if target == "" { http.Error(w, "target required", 400); return }
+		if target == "" {
+			http.Error(w, "target required", 400)
+			return
+		}
 
 		flusher, ok := w.(http.Flusher)
-		if !ok { http.Error(w, "streaming not supported", 500); return }
+		if !ok {
+			http.Error(w, "streaming not supported", 500)
+			return
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 
@@ -153,7 +174,9 @@ func main() {
 		flusher.Flush()
 
 		args := []string{"scan", target, "--format", "json", "--no-banner"}
-		if ports != "" { args = append(args, "--ports", ports) }
+		if ports != "" {
+			args = append(args, "--ports", ports)
+		}
 
 		fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "progress", "percent": 20, "text": "Scanning ports..."}))
 		flusher.Flush()
@@ -205,7 +228,9 @@ func main() {
 		}
 		historyMu.Lock()
 		scanHistory = append([]scanRecord{rec}, scanHistory...)
-		if len(scanHistory) > 100 { scanHistory = scanHistory[:100] }
+		if len(scanHistory) > 100 {
+			scanHistory = scanHistory[:100]
+		}
 		historyMu.Unlock()
 
 		// Persist to assessment_results table for dashboard
@@ -237,13 +262,20 @@ func main() {
 	mux.HandleFunc("/api/scan-history", func(w http.ResponseWriter, r *http.Request) {
 		historyMu.Lock()
 		defer historyMu.Unlock()
-		if scanHistory == nil { writeJSON(w, []scanRecord{}) } else { writeJSON(w, scanHistory) }
+		if scanHistory == nil {
+			writeJSON(w, []scanRecord{})
+		} else {
+			writeJSON(w, scanHistory)
+		}
 	})
 
 	// Trigger update
 	mux.HandleFunc("/api/update", func(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)
-		if !ok { http.Error(w, "streaming not supported", 500); return }
+		if !ok {
+			http.Error(w, "streaming not supported", 500)
+			return
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
@@ -277,7 +309,9 @@ func main() {
 						pct = p
 					}
 				}
-				if pct > 95 { pct = 95 }
+				if pct > 95 {
+					pct = 95
+				}
 				fmt.Fprintf(w, "data: %s\n\n", jsonStr(map[string]interface{}{"type": "progress", "percent": pct, "text": text}))
 				flusher.Flush()
 			} else if strings.Contains(line, "KEV") && strings.Contains(line, "Already") {
@@ -303,8 +337,13 @@ func main() {
 	mux.HandleFunc("/api/report", func(w http.ResponseWriter, r *http.Request) {
 		target := r.URL.Query().Get("target")
 		format := r.URL.Query().Get("format")
-		if format == "" { format = "html" }
-		if target == "" { http.Error(w, "target required", 400); return }
+		if format == "" {
+			format = "html"
+		}
+		if target == "" {
+			http.Error(w, "target required", 400)
+			return
+		}
 
 		switch format {
 		case "json":
@@ -315,7 +354,10 @@ func main() {
 				return
 			}
 			jsonStart := strings.Index(output, "{")
-			if jsonStart < 0 { http.Error(w, "no JSON in output", 500); return }
+			if jsonStart < 0 {
+				http.Error(w, "no JSON in output", 500)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"surfaceguard-report-%s.json\"", target))
 			w.Write([]byte(output[jsonStart:]))
@@ -329,7 +371,10 @@ func main() {
 			}
 			// Find HTML content in output (skip log lines)
 			htmlStart := strings.Index(output, "<!DOCTYPE")
-			if htmlStart < 0 { http.Error(w, "no HTML in output", 500); return }
+			if htmlStart < 0 {
+				http.Error(w, "no HTML in output", 500)
+				return
+			}
 			w.Header().Set("Content-Type", "text/html")
 			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"surfaceguard-report-%s.html\"", target))
 			w.Write([]byte(output[htmlStart:]))
@@ -343,7 +388,10 @@ func main() {
 				return
 			}
 			jsonStart := strings.Index(output, "{")
-			if jsonStart < 0 { http.Error(w, "no JSON in output", 500); return }
+			if jsonStart < 0 {
+				http.Error(w, "no JSON in output", 500)
+				return
+			}
 
 			var result map[string]interface{}
 			json.Unmarshal([]byte(output[jsonStart:]), &result)
@@ -367,7 +415,10 @@ func main() {
 				return
 			}
 			htmlStart := strings.Index(output, "<!DOCTYPE")
-			if htmlStart < 0 { http.Error(w, "no HTML in output", 500); return }
+			if htmlStart < 0 {
+				http.Error(w, "no HTML in output", 500)
+				return
+			}
 			w.Header().Set("Content-Type", "text/html")
 			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"surfaceguard-report-%s.html\"", target))
 			w.Write([]byte(output[htmlStart:]))
@@ -434,25 +485,26 @@ func main() {
 			}
 		}
 		writeJSON(w, map[string]interface{}{
-			"version":      version,
-			"build_date":   "2026-07-07",
-			"db_version":   fmt.Sprintf("%d", 3),
-			"feed_status":  feedStatus,
-			"last_update":  lastUpdate,
-			"cve_count":    getVal(dbInfo, "cve_count"),
-			"kev_count":    getVal(dbInfo, "kev_count"),
-			"epss_count":   getVal(dbInfo, "epss_count"),
+			"version":     version,
+			"build_date":  "2026-07-07",
+			"db_version":  fmt.Sprintf("%d", 3),
+			"feed_status": feedStatus,
+			"last_update": lastUpdate,
+			"cve_count":   getVal(dbInfo, "cve_count"),
+			"kev_count":   getVal(dbInfo, "kev_count"),
+			"epss_count":  getVal(dbInfo, "epss_count"),
 		})
 	})
 
-		// Assessment API routes
-		mux.HandleFunc("/api/credentials/profiles", handleCredProfiles)
-		mux.HandleFunc("/api/credentials/profile", handleCredProfile)
-		mux.HandleFunc("/api/credentials/validate", handleValidateCredentials)
-		mux.HandleFunc("/api/assessment/scan", handleAssessmentScan)
-		mux.HandleFunc("/api/assessment/history", handleAssessmentHistory)
-		mux.HandleFunc("/api/assets", handleAssets)
-		mux.HandleFunc("/api/asset", handleAsset)
+	// Assessment API routes
+	mux.HandleFunc("/api/credentials/profiles", handleCredProfiles)
+	mux.HandleFunc("/api/credentials/profile", handleCredProfile)
+	mux.HandleFunc("/api/credentials/validate", handleValidateCredentials)
+	mux.HandleFunc("/api/assessment/scan", handleAssessmentScan)
+	mux.HandleFunc("/api/assessment/scan/progress", handleAssessmentScanSSE)
+	mux.HandleFunc("/api/assessment/history", handleAssessmentHistory)
+	mux.HandleFunc("/api/assets", handleAssets)
+	mux.HandleFunc("/api/asset", handleAsset)
 
 	addr := ":8080"
 	fmt.Printf("SurfaceGuard API server on %s\n", addr)
@@ -508,7 +560,9 @@ func pingHost(ip string) bool {
 func incIP(ip net.IP) {
 	for j := len(ip) - 1; j >= 0; j-- {
 		ip[j]++
-		if ip[j] > 0 { break }
+		if ip[j] > 0 {
+			break
+		}
 	}
 }
 
@@ -528,19 +582,28 @@ func getDBInfo(cfg *config.Config, ctx2 context.Context) *models.DatabaseInfo {
 	ctx, cancel := context.WithTimeout(ctx2, 3*time.Second)
 	defer cancel()
 	db := openDB(cfg, ctx, nil)
-	if db == nil { return nil }
+	if db == nil {
+		return nil
+	}
 	defer db.Close()
 	info, err := db.Info(ctx)
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 	return info
 }
 
 func getVal(info *models.DatabaseInfo, key string) int {
-	if info == nil { return 0 }
+	if info == nil {
+		return 0
+	}
 	switch key {
-	case "cve_count": return info.CVECount
-	case "kev_count": return info.KEVCount
-	case "epss_count": return info.EPSSCount
+	case "cve_count":
+		return info.CVECount
+	case "kev_count":
+		return info.KEVCount
+	case "epss_count":
+		return info.EPSSCount
 	}
 	return 0
 }
@@ -548,17 +611,29 @@ func getVal(info *models.DatabaseInfo, key string) int {
 func applyConfigUpdates(cfg *config.Config, updates map[string]interface{}) {
 	scan, _ := updates["scan"].(map[string]interface{})
 	if scan != nil {
-		if v, ok := scan["workers"].(float64); ok { cfg.Scan.Workers = int(v) }
-		if v, ok := scan["timeout"].(string); ok { if d, e := time.ParseDuration(v); e == nil { cfg.Scan.Timeout = d } }
+		if v, ok := scan["workers"].(float64); ok {
+			cfg.Scan.Workers = int(v)
+		}
+		if v, ok := scan["timeout"].(string); ok {
+			if d, e := time.ParseDuration(v); e == nil {
+				cfg.Scan.Timeout = d
+			}
+		}
 	}
 	logging, _ := updates["logging"].(map[string]interface{})
 	if logging != nil {
-		if v, ok := logging["level"].(string); ok { cfg.Logging.Level = v }
-		if v, ok := logging["format"].(string); ok { cfg.Logging.Format = v }
+		if v, ok := logging["level"].(string); ok {
+			cfg.Logging.Level = v
+		}
+		if v, ok := logging["format"].(string); ok {
+			cfg.Logging.Format = v
+		}
 	}
 	report, _ := updates["report"].(map[string]interface{})
 	if report != nil {
-		if v, ok := report["cvss_threshold"].(float64); ok { cfg.Report.CVSSThreshold = v }
+		if v, ok := report["cvss_threshold"].(float64); ok {
+			cfg.Report.CVSSThreshold = v
+		}
 	}
 }
 
@@ -567,7 +642,9 @@ func getFindings(result map[string]interface{}) []findingRow {
 	findings, _ := result["findings"].([]interface{})
 	for _, f := range findings {
 		fm, _ := f.(map[string]interface{})
-		if fm == nil { continue }
+		if fm == nil {
+			continue
+		}
 		host, _ := fm["host"].(string)
 		port, _ := fm["port"].(map[string]interface{})
 		cve, _ := fm["cve"].(map[string]interface{})
@@ -589,10 +666,14 @@ func getFindings(result map[string]interface{}) []findingRow {
 		if cve != nil {
 			cveID, _ = cve["id"].(string)
 			cvss = getFloat(cve, "cvss_v3")
-			if cvss == 0 { cvss = getFloat(cve, "cvss_v2") }
+			if cvss == 0 {
+				cvss = getFloat(cve, "cvss_v2")
+			}
 			severity, _ = cve["severity"].(string)
 			kev, _ = cve["is_in_kev"].(bool)
-			if s, ok := cve["epss_score"].(float64); ok { epss = s }
+			if s, ok := cve["epss_score"].(float64); ok {
+				epss = s
+			}
 		}
 
 		rows = append(rows, findingRow{host, portNum, service, version, cveID, cvss, severity, kev, epss})
@@ -601,20 +682,29 @@ func getFindings(result map[string]interface{}) []findingRow {
 }
 
 func getStr(m map[string]interface{}, key string) string {
-	if m == nil { return "" }
+	if m == nil {
+		return ""
+	}
 	if v, ok := m[key]; ok && v != nil {
-		if s, ok := v.(string); ok { return s }
+		if s, ok := v.(string); ok {
+			return s
+		}
 	}
 	return ""
 }
 
 func getFloat(m map[string]interface{}, key string) float64 {
-	if m == nil { return 0 }
+	if m == nil {
+		return 0
+	}
 	if v, ok := m[key]; ok && v != nil {
 		switch n := v.(type) {
-		case float64: return n
-		case int: return float64(n)
-		case int64: return float64(n)
+		case float64:
+			return n
+		case int:
+			return float64(n)
+		case int64:
+			return float64(n)
 		}
 	}
 	return 0
@@ -623,15 +713,23 @@ func getFloat(m map[string]interface{}, key string) float64 {
 func runSurfaceGuard(args ...string) (string, error) {
 	cmd := exec.Command("./surfaceguard", args...)
 	output, err := cmd.CombinedOutput()
-	if err != nil { return "", fmt.Errorf("%s: %s", err, string(output)) }
+	if err != nil {
+		return "", fmt.Errorf("%s: %s", err, string(output))
+	}
 	return string(output), nil
 }
 
 func openDB(cfg *config.Config, ctx context.Context, w http.ResponseWriter) database.Database {
 	dbPath, err := cfg.ResolveDatabasePath()
-	if err != nil { http.Error(w, err.Error(), 500); return nil }
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return nil
+	}
 	db, err := database.NewSQLiteDatabase(ctx, dbPath)
-	if err != nil { http.Error(w, err.Error(), 500); return nil }
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return nil
+	}
 	return db
 }
 
@@ -652,11 +750,17 @@ func jsonStr(v interface{}) string {
 var assessEngine *assessment.Engine
 
 func initAssessmentEngine(cfg *config.Config, ctx context.Context) *assessment.Engine {
-	if assessEngine != nil { return assessEngine }
+	if assessEngine != nil {
+		return assessEngine
+	}
 	dbPath, err := cfg.ResolveDatabasePath()
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 	db, err := database.NewSQLiteDatabase(ctx, dbPath)
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 	m := matcher.New(db)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	assessEngine = assessment.NewEngine(&cfg.Assessment, db, m, logger)
@@ -667,12 +771,18 @@ func initAssessmentEngine(cfg *config.Config, ctx context.Context) *assessment.E
 func handleCredProfiles(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	eng := initAssessmentEngine(loadConfigOrPanic(), ctx)
-	if eng == nil { http.Error(w, "engine init failed", 500); return }
+	if eng == nil {
+		http.Error(w, "engine init failed", 500)
+		return
+	}
 
 	switch r.Method {
 	case "GET":
 		profiles, err := eng.ListProfiles(ctx)
-		if err != nil { http.Error(w, err.Error(), 500); return }
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
 		writeJSON(w, profiles)
 
 	case "POST":
@@ -689,7 +799,8 @@ func handleCredProfiles(w http.ResponseWriter, r *http.Request) {
 			Community  string `json:"community,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), 400); return
+			http.Error(w, err.Error(), 400)
+			return
 		}
 		profile := &auth.Profile{
 			Name:       req.Name,
@@ -703,7 +814,10 @@ func handleCredProfiles(w http.ResponseWriter, r *http.Request) {
 			Community:  req.Community,
 		}
 		id, err := eng.CreateProfile(ctx, profile)
-		if err != nil { http.Error(w, err.Error(), 400); return }
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
 		writeJSON(w, map[string]int64{"id": id})
 
 	default:
@@ -714,12 +828,21 @@ func handleCredProfiles(w http.ResponseWriter, r *http.Request) {
 func handleCredProfile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	eng := initAssessmentEngine(loadConfigOrPanic(), ctx)
-	if eng == nil { http.Error(w, "engine init failed", 500); return }
+	if eng == nil {
+		http.Error(w, "engine init failed", 500)
+		return
+	}
 
 	if r.Method == "DELETE" {
 		id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
-		if err != nil { http.Error(w, "invalid id", 400); return }
-		if err := eng.DeleteProfile(ctx, id); err != nil { http.Error(w, err.Error(), 500); return }
+		if err != nil {
+			http.Error(w, "invalid id", 400)
+			return
+		}
+		if err := eng.DeleteProfile(ctx, id); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
 		writeJSON(w, map[string]string{"status": "deleted"})
 		return
 	}
@@ -730,13 +853,17 @@ func handleCredProfile(w http.ResponseWriter, r *http.Request) {
 func handleValidateCredentials(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	eng := initAssessmentEngine(loadConfigOrPanic(), ctx)
-	if eng == nil { http.Error(w, "engine init failed", 500); return }
+	if eng == nil {
+		http.Error(w, "engine init failed", 500)
+		return
+	}
 
 	var req struct {
 		ProfileID int64 `json:"profile_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), 400); return
+		http.Error(w, err.Error(), 400)
+		return
 	}
 
 	result, err := eng.ValidateCredentials(ctx, req.ProfileID)
@@ -751,10 +878,16 @@ func handleValidateCredentials(w http.ResponseWriter, r *http.Request) {
 func handleAssessmentScan(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	eng := initAssessmentEngine(loadConfigOrPanic(), ctx)
-	if eng == nil { http.Error(w, "engine init failed", 500); return }
+	if eng == nil {
+		http.Error(w, "engine init failed", 500)
+		return
+	}
 
 	profileID, err := strconv.ParseInt(r.URL.Query().Get("profile_id"), 10, 64)
-	if err != nil { http.Error(w, "profile_id required", 400); return }
+	if err != nil {
+		http.Error(w, "profile_id required", 400)
+		return
+	}
 
 	result, err := eng.RunAssessment(ctx, profileID)
 	if err != nil {
@@ -764,11 +897,76 @@ func handleAssessmentScan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, result)
 }
 
+// handleAssessmentScanSSE streams assessment progress via Server-Sent Events.
+func handleAssessmentScanSSE(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	eng := initAssessmentEngine(loadConfigOrPanic(), ctx)
+	if eng == nil {
+		http.Error(w, "engine init failed", 500)
+		return
+	}
+
+	profileID, err := strconv.ParseInt(r.URL.Query().Get("profile_id"), 10, 64)
+	if err != nil {
+		http.Error(w, "profile_id required", 400)
+		return
+	}
+
+	// Set SSE headers.
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", 500)
+		return
+	}
+
+	// Send a progress event as a JSON string over SSE.
+	sendProgress := func(step string, pct float64, msg string) {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		data, _ := json.Marshal(map[string]interface{}{
+			"step":     step,
+			"progress": pct,
+			"message":  msg,
+		})
+		fmt.Fprintf(w, "event: progress\ndata: %s\n\n", data)
+		flusher.Flush()
+	}
+
+	// Send initial event.
+	sendProgress("starting", 0, "Starting assessment...")
+
+	// Run the assessment with progress in the same goroutine (it's async to
+	// the HTTP handler because we stream). The SSE connection stays open.
+	result, err := eng.RunAssessmentWithProgress(ctx, profileID, sendProgress)
+	if err != nil {
+		errData, _ := json.Marshal(map[string]string{"error": err.Error()})
+		fmt.Fprintf(w, "event: error\ndata: %s\n\n", errData)
+		flusher.Flush()
+		return
+	}
+
+	// Send final result as a "result" event.
+	resultData, _ := json.Marshal(result)
+	fmt.Fprintf(w, "event: result\ndata: %s\n\n", resultData)
+	flusher.Flush()
+}
+
 // Assessment History
 func handleAssessmentHistory(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	eng := initAssessmentEngine(loadConfigOrPanic(), ctx)
-	if eng == nil { http.Error(w, "engine init failed", 500); return }
+	if eng == nil {
+		http.Error(w, "engine init failed", 500)
+		return
+	}
 
 	limitStr := r.URL.Query().Get("limit")
 	limit := 20
@@ -777,7 +975,10 @@ func handleAssessmentHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results, err := eng.ListHistory(ctx, limit)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 	writeJSON(w, results)
 }
 
@@ -785,25 +986,41 @@ func handleAssessmentHistory(w http.ResponseWriter, r *http.Request) {
 func handleAssets(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	eng := initAssessmentEngine(loadConfigOrPanic(), ctx)
-	if eng == nil { http.Error(w, "engine init failed", 500); return }
+	if eng == nil {
+		http.Error(w, "engine init failed", 500)
+		return
+	}
 
 	db := openDB(loadConfigOrPanic(), ctx, w)
-	if db == nil { return }
+	if db == nil {
+		return
+	}
 	assets, err := db.AssetInventory().List(ctx)
-	if err != nil { http.Error(w, err.Error(), 500); return }
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 	writeJSON(w, assets)
 }
 
 func handleAsset(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
-	if err != nil { http.Error(w, "invalid id", 400); return }
+	if err != nil {
+		http.Error(w, "invalid id", 400)
+		return
+	}
 
 	db := openDB(loadConfigOrPanic(), ctx, w)
-	if db == nil { return }
+	if db == nil {
+		return
+	}
 
 	asset, err := db.AssetInventory().Get(ctx, id)
-	if err != nil { http.Error(w, "not found", 404); return }
+	if err != nil {
+		http.Error(w, "not found", 404)
+		return
+	}
 
 	// Gather packages, software, findings.
 	packages, _ := db.InstalledPackage().ListByAsset(ctx, id)
@@ -818,7 +1035,9 @@ func handleAsset(w http.ResponseWriter, r *http.Request) {
 
 func loadConfigOrPanic() *config.Config {
 	cfg, err := config.LoadConfig("")
-	if err != nil { log.Printf("config: %v", err) }
+	if err != nil {
+		log.Printf("config: %v", err)
+	}
 	return cfg
 }
 
@@ -827,7 +1046,10 @@ func corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == "OPTIONS" { w.WriteHeader(200); return }
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(200)
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }

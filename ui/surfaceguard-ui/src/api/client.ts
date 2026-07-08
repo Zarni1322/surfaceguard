@@ -7,11 +7,18 @@ import type {
   ValidationResult,
   AssessmentResult,
   AssetDetail,
+  ScanProgress,
 } from "@/types";
 
 const api = axios.create({
   baseURL: "/api",
   timeout: 30000,
+});
+
+// Extended timeout API instance for long-running assessments
+const apiLong = axios.create({
+  baseURL: "/api",
+  timeout: 600000, // 10 minutes
 });
 
 // Database info — API returns JSON directly
@@ -82,10 +89,55 @@ export async function validateCredentials(profileId: number): Promise<Validation
   return data;
 }
 
-// Assessment Scan
+// Assessment Scan — uses extended timeout for long-running operations.
 export async function runAssessmentScan(profileId: number): Promise<AssessmentResult> {
-  const { data } = await api.get<AssessmentResult>("/assessment/scan", { params: { profile_id: profileId } });
+  const { data } = await apiLong.get<AssessmentResult>("/assessment/scan", { params: { profile_id: profileId } });
   return data;
+}
+
+// Assessment Scan via SSE — returns progress callbacks for live status updates.
+export function runAssessmentScanSSE(
+  profileId: number,
+  onProgress: (progress: ScanProgress) => void,
+  onResult: (result: AssessmentResult) => void,
+  onError: (error: string) => void,
+): () => void {
+  const url = `/api/assessment/scan/progress?profile_id=${profileId}`;
+  const source = new EventSource(url);
+
+  source.addEventListener("progress", (event: MessageEvent) => {
+    try {
+      const data: ScanProgress = JSON.parse(event.data);
+      onProgress(data);
+    } catch { /* ignore parse errors */ }
+  });
+
+  source.addEventListener("result", (event: MessageEvent) => {
+    try {
+      const data: AssessmentResult = JSON.parse(event.data);
+      onResult(data);
+      source.close();
+    } catch { /* ignore */ }
+  });
+
+  source.addEventListener("error", (event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data);
+      onError(data.error || "Assessment failed");
+    } catch {
+      onError("Assessment failed");
+    }
+    source.close();
+  });
+
+  source.onerror = () => {
+    // EventSource auto-reconnects, but if it keeps failing we give up.
+    onError("Connection lost during assessment");
+    source.close();
+  };
+
+  // Return a cleanup function.
+  return () => source.close();
 }
 
 // Assessment History

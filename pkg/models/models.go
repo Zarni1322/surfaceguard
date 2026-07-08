@@ -359,6 +359,14 @@ type SecurityFinding struct {
 	Evidence  string `json:"evidence,omitempty"`
 }
 
+// ScanProgress represents a real-time progress update during an assessment scan.
+// Used for SSE streaming to the frontend.
+type ScanProgress struct {
+	Step     string  `json:"step"`     // connecting, collecting, packages, cves, done, failed
+	Progress float64 `json:"progress"` // 0.0 - 100.0
+	Message  string  `json:"message"`
+}
+
 // AssessmentResult holds the output of an authenticated assessment scan.
 type AssessmentResult struct {
 	ID           int64                `json:"id"`

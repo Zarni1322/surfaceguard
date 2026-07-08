@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck, Loader2, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
-import { listCredentialProfiles, runAssessmentScan } from "@/api/client";
-import type { CredentialProfile, AssessmentResult } from "@/types";
+import { listCredentialProfiles, runAssessmentScan, runAssessmentScanSSE } from "@/api/client";
+import type { CredentialProfile, AssessmentResult, ScanProgress } from "@/types";
 import { toast } from "sonner";
 import PageHeader from "@/components/PageHeader";
 import PageContainer, { colSpan } from "@/components/PageContainer";
@@ -15,19 +15,83 @@ export default function AssessmentPage() {
   const [selected, setSelected] = useState<number | null>(null);
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<AssessmentResult | null>(null);
+  const [progress, setProgress] = useState<ScanProgress | null>(null);
+  const [useSSE, setUseSSE] = useState(true);
 
-  useEffect(() => { listCredentialProfiles().then(setProfiles).catch(() => toast.error("Failed to load profiles")).finally(() => setLoading(false)); }, []);
+  useEffect(() => {
+    listCredentialProfiles()
+      .then(setProfiles)
+      .catch(() => toast.error("Failed to load profiles"))
+      .finally(() => setLoading(false));
+  }, []);
 
   async function handleScan() {
     if (!selected) return;
     setScanning(true);
     setResult(null);
-    try { const res = await runAssessmentScan(selected); setResult(res); toast.success("Assessment complete"); }
-    catch { toast.error("Assessment failed"); } finally { setScanning(false); }
+    setProgress(null);
+
+    if (useSSE) {
+      // Use SSE for live progress updates.
+      const cleanup = runAssessmentScanSSE(
+        selected,
+        (p) => setProgress(p),
+        (r) => {
+          setResult(r);
+          setScanning(false);
+          setProgress(null);
+          toast.success("Assessment complete");
+        },
+        (err) => {
+          // Fall back to polling on SSE failure.
+          console.warn("SSE failed, falling back to polling:", err);
+          setUseSSE(false);
+          // Retry with polling.
+          runAssessmentScan(selected)
+            .then((r) => {
+              setResult(r);
+              toast.success("Assessment complete");
+            })
+            .catch(() => toast.error("Assessment failed"))
+            .finally(() => setScanning(false));
+        },
+      );
+      // Store cleanup if we need to cancel.
+      return;
+    }
+
+    // Fallback: direct HTTP (no progress).
+    try {
+      const res = await runAssessmentScan(selected);
+      setResult(res);
+      toast.success("Assessment complete");
+    } catch {
+      toast.error("Assessment failed");
+    } finally {
+      setScanning(false);
+    }
   }
 
   function si(status: string) {
-    switch (status) { case "pass": return <CheckCircle className="h-3.5 w-3.5 text-green-400" />; case "warn": return <AlertTriangle className="h-3.5 w-3.5 text-yellow-400" />; case "fail": return <XCircle className="h-3.5 w-3.5 text-red-400" />; default: return null; }
+    switch (status) {
+      case "pass": return <CheckCircle className="h-3.5 w-3.5 text-green-400" />;
+      case "warn": return <AlertTriangle className="h-3.5 w-3.5 text-yellow-400" />;
+      case "fail": return <XCircle className="h-3.5 w-3.5 text-red-400" />;
+      default: return null;
+    }
+  }
+
+  // Map step names to label and color
+  function stepInfo(step: string): { label: string; color: string } {
+    switch (step) {
+      case "starting": case "connecting": return { label: "Connecting", color: "bg-blue-500" };
+      case "collecting": return { label: "Collecting data", color: "bg-indigo-500" };
+      case "cves": return { label: "Correlating CVEs", color: "bg-orange-500" };
+      case "scoring": return { label: "Scoring", color: "bg-yellow-500" };
+      case "saving": return { label: "Saving", color: "bg-purple-500" };
+      case "done": return { label: "Done", color: "bg-green-500" };
+      default: return { label: step, color: "bg-gray-500" };
+    }
   }
 
   return (
@@ -55,6 +119,37 @@ export default function AssessmentPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Progress bar — shown during scan */}
+      {scanning && progress && (
+        <div className={colSpan(12)}>
+          <Card className="bg-[#111827] border-[#1E293B]">
+            <CardContent className="p-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const info = stepInfo(progress.step);
+                      return <><div className={`w-2 h-2 rounded-full ${info.color} animate-pulse`} /><span className="text-[#F8FAFC] font-medium">{info.label}</span></>;
+                    })()}
+                  </div>
+                  <span className="text-[#3B82F6] font-bold tabular-nums">{Math.round(progress.progress)}%</span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-[#0B1220] rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-[#3B82F6] to-[#8B5CF6]"
+                    style={{ width: `${Math.min(progress.progress, 100)}%` }}
+                  />
+                </div>
+
+                <p className="text-xs text-[#94A3B8]">{progress.message}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {result && (
         <>

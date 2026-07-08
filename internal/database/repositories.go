@@ -62,6 +62,9 @@ type CVERepository interface {
 	FindByCPE23URI(ctx context.Context, cpe23URI string) ([]DBCVE, error)
 	// SearchByProduct returns all CVEs matching a vendor+product combination.
 	SearchByProduct(ctx context.Context, vendor, product string) ([]DBCVE, error)
+	// SearchByProductName returns all CVEs matching a product name alone
+	// (vendor-agnostic). Fallback when the vendor is unknown / wildcard.
+	SearchByProductName(ctx context.Context, product string) ([]DBCVE, error)
 	// Upsert inserts a CVE or updates it if it already exists (by cve_id + cpe_id).
 	Upsert(ctx context.Context, cve *DBCVE) (int64, bool, error)
 	// Count returns the total number of CVE records.

@@ -44,7 +44,9 @@ func (c *LinuxCollector) CollectAll(ctx context.Context) (*models.AssetInfo, []m
 	return asset, packages, findings, nil
 }
 
-// collectPackages gets installed packages via dpkg or rpm.
+// collectPackages gets installed packages via dpkg or rpm and generates
+// proper CPE 2.3 URIs using the NVD vendor/product mapping (vendor_map.go).
+// When no mapping exists, it falls back to the legacy wildcard-vendor CPE.
 func (c *LinuxCollector) collectPackages(ctx context.Context) []models.InstalledPackage {
 	// Try dpkg-query first (Debian/Ubuntu), fall back to rpm (RHEL/Fedora).
 	output, err := c.run(ctx, "dpkg-query -W -f '${Package} ${Version} ${Architecture}\\n' 2>/dev/null")
@@ -65,19 +67,59 @@ func (c *LinuxCollector) collectPackages(ctx context.Context) []models.Installed
 		if len(parts) < 2 {
 			continue
 		}
+		pkgName := strings.ToLower(parts[0])
+		pkgVersion := parts[1]
+
 		pkg := models.InstalledPackage{
 			Name:    parts[0],
-			Version: parts[1],
+			Version: pkgVersion,
 			Status:  "installed",
 		}
 		if len(parts) >= 3 {
 			pkg.Arch = parts[2]
 		}
-		// Generate CPE URI (best-effort).
-		pkg.CPE23URI = fmt.Sprintf("cpe:2.3:a:*:%s:%s:*:*:*:*:*:*:*", strings.ToLower(pkg.Name), pkg.Version)
+		// Generate a CPE 2.3 URI — prefer the NVD vendor map, fall back to wildcard.
+		pkg.CPE23URI = generateCPE23URI(pkgName, pkgVersion)
 		packages = append(packages, pkg)
 	}
 	return packages
+}
+
+// generateCPE23URI produces a CPE 2.3 URI for the given package name and version.
+//
+// Resolution order:
+//  1. Look up the package name in the NVD vendor/product mapping (vendor_map.go).
+//     If found → use the proper vendor and product: cpe:2.3:a:{vendor}:{product}:{version}
+//  2. If not mapped, try a heuristic: assume the package's own ecosystem name
+//     is both vendor and product (works for many standalone projects).
+//  3. Fall back to wildcard vendor: cpe:2.3:a:*:{pkg}:{version}
+func generateCPE23URI(pkgName, pkgVersion string) string {
+	// Strip Debian multi-arch suffixes like :amd64, :i386, :all
+	cleanName := pkgName
+	if idx := strings.Index(cleanName, ":"); idx > 0 {
+		cleanName = cleanName[:idx]
+	}
+
+	// Step 1: Check the vendor map.
+	if entry := LookupVendorProduct(cleanName); entry != nil {
+		return fmt.Sprintf("cpe:2.3:a:%s:%s:%s:*:*:*:*:*:*:*",
+			entry.Vendor, entry.Product, pkgVersion)
+	}
+
+	// Step 2: Heuristic — use package name as both vendor and product.
+	// This works well for standalone projects like "nginx", "redis", "memcached".
+	// We don't use this blindly — only when the name looks like a well-known
+	// standalone product (no hyphens/underscores makes it look like a brand).
+	// For names with separators, the vendor map is the only reliable source.
+	isSimpleName := !strings.ContainsAny(cleanName, "-_+")
+	if isSimpleName && len(cleanName) <= 20 {
+		return fmt.Sprintf("cpe:2.3:a:%s:%s:%s:*:*:*:*:*:*:*",
+			cleanName, cleanName, pkgVersion)
+	}
+
+	// Step 3: Fall back to wildcard vendor — lowest match probability
+	// but keeps backward compatibility with product-only search fallbacks.
+	return fmt.Sprintf("cpe:2.3:a:*:%s:%s:*:*:*:*:*:*:*", cleanName, pkgVersion)
 }
 
 // collectSecurityFindings runs lightweight security checks on Linux.
@@ -121,7 +163,11 @@ func (c *LinuxCollector) collectSecurityFindings(ctx context.Context) []models.S
 	}
 
 	// 5. SSH service running.
-	sshRunning, _ := c.run(ctx, "systemctl is-active ssh 2>/dev/null || systemctl is-active sshd 2>/dev/null || echo 'inactive'")
+	sshRunning, _ := c.run(ctx,
+		"systemctl is-active ssh 2>/dev/null | grep -q active && echo 'active' || "+
+			"service ssh status 2>/dev/null | grep -q running && echo 'active' || "+
+			"pgrep -x sshd >/dev/null 2>&1 && echo 'active' || "+
+			"echo 'inactive'")
 	if !strings.Contains(sshRunning, "active") {
 		findings = append(findings, models.SecurityFinding{
 			CheckID: "linux-ssh-service", Name: "SSH Service Not Running",
@@ -160,4 +206,3 @@ func parseDistroFromRelease(release string) string {
 	}
 	return ""
 }
-

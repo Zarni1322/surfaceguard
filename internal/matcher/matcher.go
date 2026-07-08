@@ -69,9 +69,26 @@ func (m *Matcher) matchCPE(ctx context.Context, host, ip string, port models.Por
 		dbCPEs, _ = m.db.CPE().FindByProduct(ctx, cpe.Vendor, cpe.Product, cpe.Version)
 	}
 
-	// If still no match, look up CVEs directly by vendor and product name.
+	// If still no match and vendor is wildcard, try product-only search
+	// (vendor-agnostic). Many generated CPEs have vendor="*" which never
+	// matches the NVD database directly.
+	if len(dbCPEs) == 0 && cpe.Vendor == "*" {
+		dbCPEs, _ = m.db.CPE().FindByProduct(ctx, "*", cpe.Product, cpe.Version)
+		// If still nothing, try with wildcard version.
+		if len(dbCPEs) == 0 && cpe.Version != "*" {
+			dbCPEs, _ = m.db.CPE().FindByProduct(ctx, "*", cpe.Product, "*")
+		}
+	}
+
+	// If still no match, look up CVEs directly — first by vendor+product,
+	// then by product alone as a final fallback.
 	if len(dbCPEs) == 0 {
 		dbCVEs, _ := m.db.CVE().SearchByProduct(ctx, cpe.Vendor, cpe.Product)
+		// If vendor is wildcard or SearchByProduct returned nothing,
+		// try a vendor-agnostic product name search.
+		if len(dbCVEs) == 0 || cpe.Vendor == "*" {
+			dbCVEs, _ = m.db.CVE().SearchByProductName(ctx, cpe.Product)
+		}
 		for _, dbCVE := range dbCVEs {
 			finding := m.buildFinding(ctx, host, ip, port, cpe, dbCVE)
 			findings = append(findings, finding)

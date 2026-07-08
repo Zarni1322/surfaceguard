@@ -57,12 +57,25 @@ func (c *SSHConnector) Connect(ctx context.Context, profile *Profile) (Session, 
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Config: ssh.Config{
 			KeyExchanges: []string{
+				// Modern KEX (preferred)
+				"curve25519-sha256@libssh.org",
+				"ecdh-sha2-nistp256",
+				"ecdh-sha2-nistp384",
+				"ecdh-sha2-nistp521",
+				"diffie-hellman-group-exchange-sha256",
+				"diffie-hellman-group16-sha512",
+				"diffie-hellman-group14-sha256",
+				// Legacy fallbacks
 				"diffie-hellman-group-exchange-sha1",
 				"diffie-hellman-group14-sha1",
 				"diffie-hellman-group1-sha1",
 			},
 		},
 		HostKeyAlgorithms: []string{
+			ssh.KeyAlgoED25519,
+			ssh.KeyAlgoECDSA256,
+			ssh.KeyAlgoECDSA384,
+			ssh.KeyAlgoECDSA521,
 			ssh.KeyAlgoRSA,
 			ssh.InsecureKeyAlgoDSA,
 		},
@@ -101,13 +114,20 @@ type sshSession struct {
 }
 
 func (s *sshSession) RunCommand(ctx context.Context, command string) (string, error) {
+	// Create a new session for each command — ssh.Session can only Run() once.
+	sub, err := s.client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("new session: %w", err)
+	}
+	defer sub.Close()
+
 	var stdout, stderr bytes.Buffer
-	s.session.Stdout = &stdout
-	s.session.Stderr = &stderr
+	sub.Stdout = &stdout
+	sub.Stderr = &stderr
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- s.session.Run(command)
+		errCh <- sub.Run(command)
 	}()
 
 	select {
@@ -117,7 +137,7 @@ func (s *sshSession) RunCommand(ctx context.Context, command string) (string, er
 		}
 		return stdout.String(), nil
 	case <-ctx.Done():
-		s.session.Signal(ssh.SIGINT)
+		sub.Signal(ssh.SIGINT)
 		return "", ctx.Err()
 	}
 }

@@ -21,13 +21,125 @@ info() { echo -e "  ${BLUE}i${NC} $1"; }
 warn() { echo -e "  ${YELLOW}⚠${NC} $1"; }
 err()  { echo -e "  ${RED}✗${NC} $1"; }
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# ---- Restart / stop / status helpers ----
+stop_surfaceguard() {
+    local found=false
+    info "Looking for running SurfaceGuard processes..."
+
+    # Kill by process name (surfaceguard-api, surfaceguard, next dev server)
+    for PROC in "surfaceguard-api" "surfaceguard$"; do
+        local PIDS
+        PIDS=$(pgrep -f "$PROC" 2>/dev/null || true)
+        if [ -n "$PIDS" ]; then
+            for PID in $PIDS; do
+                # Don't kill ourselves
+                [ "$PID" = "$$" ] && continue
+                info "Stopping $PROC (PID: $PID)..."
+                kill "$PID" 2>/dev/null || true
+                found=true
+            done
+        fi
+    done
+
+    # Also kill processes on our ports (in case they have different names)
+    for port in 8080 3000; do
+        local PID
+        PID=$(lsof -ti tcp:"$port" 2>/dev/null) || true
+        if [ -n "$PID" ]; then
+            info "Stopping process on port $port (PID: $PID)..."
+            kill "$PID" 2>/dev/null || true
+            found=true
+        fi
+    done
+
+    if [ "$found" = false ]; then
+        info "No SurfaceGuard processes found running."
+    else
+        sleep 1
+        info "All SurfaceGuard processes stopped."
+    fi
+}
+
+status_surfaceguard() {
+    echo ""
+    echo "  ${BOLD}SurfaceGuard Status${NC}"
+    echo "  ${DIM}$(printf '%*s' 50 | tr ' ' '─')${NC}"
+
+    for PROC in "surfaceguard-api" "surfaceguard$"; do
+        local PIDS
+        PIDS=$(pgrep -f "$PROC" 2>/dev/null || true)
+        if [ -n "$PIDS" ]; then
+            for PID in $PIDS; do
+                [ "$PID" = "$$" ] && continue
+                local RSS
+                RSS=$(ps -o rss= -p "$PID" 2>/dev/null | tr -d ' ')
+                echo "  ${GREEN}●${NC} $(basename "$PROC" | sed 's/\$//')  running  (PID: $PID, MEM: ${RSS:-?} KB)"
+            done
+        else
+            echo "  ${RED}○${NC} $(basename "$PROC" | sed 's/\$//')  stopped"
+        fi
+    done
+
+    for port in 8080 3000; do
+        local PID
+        PID=$(lsof -ti tcp:"$port" 2>/dev/null) || true
+        local label="API server"
+        [ "$port" = "3000" ] && label="Web UI"
+        if [ -n "$PID" ]; then
+            echo "  ${GREEN}●${NC} $label        listening  (port $port, PID: $PID)"
+        else
+            echo "  ${RED}○${NC} $label        not listening  (port $port)"
+        fi
+    done
+    echo ""
+}
+
+# ---- Handle restart/stop/status arguments ----
+ACTION="${1:-start}"
+
+case "$ACTION" in
+    restart)
+        echo ""
+        echo "  ${BOLD}SurfaceGuard${NC} ${DIM}v1.0.0${NC}"
+        echo "  ${DIM}Restarting all services...${NC}"
+        echo ""
+        cd "$SCRIPT_DIR"
+        stop_surfaceguard
+        sleep 1
+        # Fall through to start below
+        ;;
+    stop)
+        echo ""
+        echo "  ${BOLD}SurfaceGuard${NC} ${DIM}v1.0.0${NC}"
+        echo "  ${DIM}Stopping all services...${NC}"
+        echo ""
+        cd "$SCRIPT_DIR"
+        stop_surfaceguard
+        exit 0
+        ;;
+    status)
+        cd "$SCRIPT_DIR"
+        status_surfaceguard
+        exit 0
+        ;;
+    start)
+        # Normal start — nothing extra
+        ;;
+    *)
+        err "Unknown action: $ACTION"
+        info "Usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
+
 echo ""
 echo "  ${BOLD}SurfaceGuard${NC} ${DIM}v1.0.0${NC}"
 echo "  ${DIM}Enterprise Infrastructure Vulnerability Scanner${NC}"
 echo "  ${DIM}Cyber Ops Academy — Han Niux${NC}"
 echo ""
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # ---- Check prerequisites ----
@@ -118,7 +230,9 @@ echo ""
 echo "  ${DIM}Quick commands:${NC}"
 echo "  ${DIM}  Scan:          ./surfaceguard scan <target>${NC}"
 echo "  ${DIM}  Update DB:     ./surfaceguard update${NC}"
-echo "  ${DIM}  Stop all:      kill ${API_PID} ${UI_PID}${NC}"
+echo "  ${DIM}  Restart:       ./main.sh restart${NC}"
+echo "  ${DIM}  Stop:          ./main.sh stop${NC}"
+echo "  ${DIM}  Status:        ./main.sh status${NC}"
 echo "  ${DIM}  API logs:      tail -f /tmp/surfaceguard-api.log${NC}"
 echo "  ${DIM}  UI logs:       tail -f /tmp/surfaceguard-ui.log${NC}"
 echo ""
