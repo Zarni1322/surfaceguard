@@ -6,6 +6,8 @@ import { History, Clock, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import axios from "axios";
 import { formatDate, severityColor } from "@/lib/utils";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 
 export default function ScanHistoryPage() {
   const { data: history, isLoading, error, refetch } = useQuery({
@@ -19,7 +21,7 @@ export default function ScanHistoryPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-3 p-3 md:p-4 lg:p-5 xl:p-6">
+      <PageContainer>
         <h1 className="text-2xl font-bold text-[#F8FAFC]">Scan History</h1>
         <Card className="border-[#1E293B] bg-[#1E293B]">
           <CardContent className="py-20">
@@ -28,14 +30,14 @@ export default function ScanHistoryPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
   if (error) {
     return (
-      <div className="space-y-3">
-        <h1 className="text-2xl font-bold text-[#F8FAFC]">Scan History</h1>
+      <PageContainer>
+        <PageHeader title="Scan History" />
         <Card className="border-[#EF4444]/30 bg-[#1E293B]">
           <CardContent className="pt-6">
             <p className="text-[#EF4444]">Failed to load scan history</p>
@@ -44,25 +46,16 @@ export default function ScanHistoryPage() {
             </Button>
           </CardContent>
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
   const records = history || [];
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[#F8FAFC]">Scan History</h1>
-          <p className="text-sm text-[#94A3B8] mt-1">
-            {records.length > 0
-              ? `${records.length} scan(s) recorded`
-              : "No scans recorded yet"}
-          </p>
-        </div>
-        {records.length > 0 && (
-          <Button
+    <PageContainer>
+      <PageHeader title="Scan History" description={records.length > 0 ? `${records.length} scan(s) recorded` : "No scans recorded yet"}
+        actions={records.length > 0 ? <Button
             variant="outline"
             size="sm"
             className="border-[#0B1220] text-[#94A3B8]"
@@ -72,9 +65,7 @@ export default function ScanHistoryPage() {
             }}
           >
             <Trash2 className="h-4 w-4 mr-2" /> Clear
-          </Button>
-        )}
-      </div>
+          </Button> : undefined} />
 
       {records.length > 0 ? (
         <Card className="border-[#1E293B] bg-[#1E293B]">
@@ -136,7 +127,7 @@ export default function ScanHistoryPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </PageContainer>
   );
 }
 

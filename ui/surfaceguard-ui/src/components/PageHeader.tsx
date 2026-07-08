@@ -10,10 +10,10 @@ interface PageHeaderProps {
 
 export default function PageHeader({ title, description, actions, className }: PageHeaderProps) {
   return (
-    <div className={cn("flex flex-wrap items-center justify-between gap-3", className)}>
+    <div className={cn("flex flex-wrap items-center justify-between gap-3 mb-4 lg:mb-5", className)}>
       <div className="min-w-0">
-        <h1 className="text-xl font-bold text-[#F8FAFC] truncate">{title}</h1>
-        {description && <p className="text-xs text-[#94A3B8] mt-0.5">{description}</p>}
+        <h1 className="text-xl lg:text-2xl font-bold text-[#F8FAFC] truncate">{title}</h1>
+        {description && <p className="text-xs lg:text-sm text-[#94A3B8] mt-0.5">{description}</p>}
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
     </div>

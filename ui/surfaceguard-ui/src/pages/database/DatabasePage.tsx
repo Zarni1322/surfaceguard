@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { useDbInfo } from "@/hooks/useApi";
 import { formatDate } from "@/lib/utils";
 import { Database, RefreshCw, Shield, Trash2 } from "lucide-react";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 
 export default function DatabasePage() {
   const { data: dbInfo, isLoading } = useDbInfo();
@@ -11,13 +13,8 @@ export default function DatabasePage() {
   const lastUpdate = dbInfo?.last_updated ? formatDate(dbInfo.last_updated) : "N/A";
 
   return (
-    <div className="space-y-3 p-3 md:p-4 lg:p-5 xl:p-6">
-      <div>
-        <h1 className="text-2xl font-bold text-[#F8FAFC]">Database</h1>
-        <p className="text-sm text-[#94A3B8] mt-1">
-          Vulnerability database management
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader title="Database" description="Vulnerability database management" />
 
       <div className="grid gap-3 grid-cols-1 lg:grid-cols-2">
         <Card className="border-[#1E293B] bg-[#1E293B]">
@@ -65,7 +62,7 @@ export default function DatabasePage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageContainer>
   );
 }
 

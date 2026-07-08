@@ -5,6 +5,8 @@ import { ClipboardCheck, ExternalLink, ChevronDown, ChevronUp, Trash2 } from "lu
 import { getAssessmentHistory, deleteAssessmentHistory } from "@/api/client";
 import type { AssessmentResult } from "@/types";
 import { toast } from "sonner";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 
 export default function AssessmentHistoryPage() {
   const [results, setResults] = useState<AssessmentResult[]>([]);
@@ -51,18 +53,9 @@ export default function AssessmentHistoryPage() {
   }
 
   return (
-    <div className="space-y-3 p-3 md:p-4 lg:p-5 xl:p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[#F8FAFC]">Assessment History</h1>
-          <p className="text-[#94A3B8] text-sm mt-1">Past authenticated assessment scans</p>
-        </div>
-        {results.length > 0 && (
-          <Button onClick={handleReset} disabled={resetting} variant="outline" size="sm" className="border-red-500/30 text-red-400 hover:bg-red-500/10">
-            <Trash2 className="h-4 w-4 mr-1" />{resetting ? "Resetting..." : "Reset"}
-          </Button>
-        )}
-      </div>
+    <PageContainer>
+      <PageHeader title="Assessment History" description="Past authenticated assessment scans"
+        actions={results.length > 0 ? <Button onClick={handleReset} disabled={resetting} variant="outline" size="sm" className="border-red-500/30 text-red-400 hover:bg-red-500/10"><Trash2 className="h-4 w-4 mr-1" />{resetting ? "Resetting..." : "Reset"}</Button> : undefined} />
 
       {loading ? (
         <p className="text-[#94A3B8]">Loading...</p>
@@ -157,6 +150,6 @@ export default function AssessmentHistoryPage() {
           ))}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

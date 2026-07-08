@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 import {
   FileText,
   Download,
@@ -71,13 +73,8 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="space-y-3 p-3 md:p-4 lg:p-5 xl:p-6">
-      <div>
-        <h1 className="text-2xl font-bold text-[#F8FAFC]">Reports</h1>
-        <p className="text-sm text-[#94A3B8] mt-1">
-          Generate and download vulnerability assessment reports
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader title="Reports" description="Generate and download vulnerability assessment reports" />
 
       {/* Target Input */}
       <Card className="border-[#1E293B] bg-[#1E293B]">
@@ -199,6 +196,6 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </PageContainer>
   );
 }

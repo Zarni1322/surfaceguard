@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { RefreshCw, Loader2, Database, CheckCircle2, AlertCircle } from "lucide-react";
 import { useDbInfo } from "@/hooks/useApi";
 import { formatDate } from "@/lib/utils";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 
 // Module-level ref that survives page navigation
 let persistentES: EventSource | null = null;
@@ -64,13 +66,9 @@ export default function UpdatesPage() {
   const feedStatus = updating ? "updating" : (dbInfo?.cve_count ? "up-to-date" : "unknown");
 
   return (
-    <div className="space-y-3 p-3 md:p-4 lg:p-5 xl:p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[#F8FAFC]">Update Center</h1>
-          <p className="text-sm text-[#94A3B8] mt-1">Manage vulnerability feed updates</p>
-        </div>
-        <Button
+    <PageContainer>
+      <PageHeader title="Update Center" description="Manage vulnerability feed updates"
+        actions={<Button
           onClick={handleUpdate}
           disabled={updating}
           className="bg-[#3B82F6] hover:bg-[#2563EB] text-white min-w-[160px]"
@@ -81,8 +79,7 @@ export default function UpdatesPage() {
             <RefreshCw className="h-4 w-4 mr-2" />
           )}
           {updating ? "Updating..." : "Update All Feeds"}
-        </Button>
-      </div>
+        </Button>} />
 
       {/* Real-time Progress Bar */}
       {updating && (
@@ -160,7 +157,7 @@ export default function UpdatesPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }
 

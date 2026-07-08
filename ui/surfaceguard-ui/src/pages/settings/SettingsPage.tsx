@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import axios from "axios";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 import {
   Settings,
   Save,
@@ -97,32 +99,12 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-3 p-3 md:p-4 lg:p-5 xl:p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[#F8FAFC]">Settings</h1>
-          <p className="text-sm text-[#94A3B8] mt-1">System configuration</p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleReset}
-            className="border-[#0B1220] text-[#94A3B8]"
-          >
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Reset
-          </Button>
-          <Button
-            onClick={handleSave}
-            size="sm"
-            className="bg-[#3B82F6] hover:bg-[#2563EB] text-white"
-          >
-            <Save className="h-4 w-4 mr-2" />
-            Save Settings
-          </Button>
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeader title="Settings" description="System configuration"
+        actions={<div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleReset} className="border-[#0B1220] text-[#94A3B8]"><RotateCcw className="h-4 w-4 mr-2" />Reset</Button>
+          <Button onClick={handleSave} size="sm" className="bg-[#3B82F6] hover:bg-[#2563EB] text-white"><Save className="h-4 w-4 mr-2" />Save Settings</Button>
+        </div>} />
 
       <div className="grid gap-3 grid-cols-1 lg:grid-cols-2">
         {/* System Information */}
@@ -258,7 +240,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageContainer>
   );
 }
 

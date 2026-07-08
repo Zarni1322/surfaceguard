@@ -5,6 +5,8 @@ import { listAssets } from "@/api/client";
 import type { AssetDetail } from "@/types";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 
 export default function AssetsPage() {
   const [assets, setAssets] = useState<AssetDetail[]>([]);
@@ -35,11 +37,8 @@ export default function AssetsPage() {
   }
 
   return (
-    <div className="space-y-3 p-3 md:p-4 lg:p-5 xl:p-6">
-      <div>
-        <h1 className="text-2xl font-bold text-[#F8FAFC]">Asset Inventory</h1>
-        <p className="text-sm text-[#94A3B8] mt-1">Discovered assets from authenticated assessments</p>
-      </div>
+    <PageContainer>
+      <PageHeader title="Asset Inventory" description="Discovered assets from authenticated assessments" />
 
       {loading ? (
         <p className="text-[#94A3B8]">Loading...</p>
@@ -83,6 +82,6 @@ export default function AssetsPage() {
           </table>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }
