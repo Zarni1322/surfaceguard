@@ -64,6 +64,22 @@ type EASMResult struct {
 	Scan     models.EASMScan
 }
 
+// CreateScanRecord creates a new scan record in the database and returns its ID.
+// This allows the API to return the scan ID immediately before running the pipeline.
+func (o *Orchestrator) CreateScanRecord(ctx context.Context, req models.EASMScanRequest) (int64, error) {
+	dbScan := &database.DBEASMScan{
+		Target:      req.Target,
+		ScanType:    string(req.ScanType),
+		Wordlist:    string(req.Wordlist),
+		Ports:       string(req.Ports),
+		StartedAt:   time.Now().UTC().Format(time.RFC3339),
+		Status:      "running",
+		WorkerCount: req.Workers,
+		Screenshots: boolToInt(req.Screenshots),
+	}
+	return o.db.EASMScan().Create(ctx, dbScan)
+}
+
 // Run executes the full EASM pipeline for a target.
 func (o *Orchestrator) Run(ctx context.Context, req models.EASMScanRequest, progress ProgressFn) (*EASMResult, error) {
 	if progress == nil {

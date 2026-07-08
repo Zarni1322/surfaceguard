@@ -1115,35 +1115,31 @@ func handleEASMScan(w http.ResponseWriter, r *http.Request) {
 		req.Ports = models.EASMPortFast
 	}
 
-	type scanResult struct {
-		result *easm.EASMResult
-		err    error
+	// Create the scan record immediately so we always have a valid scan ID.
+	scanID, err := orch.CreateScanRecord(ctx, req)
+	if err != nil {
+		writeJSON(w, map[string]interface{}{"status": "failed", "error": fmt.Sprintf("create scan: %v", err)})
+		return
 	}
-	resultCh := make(chan scanResult, 1)
-	bgCtx := context.Background()
-	go func() {
-		res, err := orch.Run(bgCtx, req, nil)
-		resultCh <- scanResult{result: res, err: err}
-	}()
 
-	select {
-	case sr := <-resultCh:
-		if sr.err != nil {
-			writeJSON(w, map[string]interface{}{"status": "failed", "error": sr.err.Error()})
-			return
-		}
-		writeJSON(w, map[string]interface{}{"status": "completed", "scan_id": sr.result.ScanID, "scan": sr.result.Scan})
-	case <-time.After(30 * time.Second):
-		writeJSON(w, map[string]interface{}{
-			"status": "running", "scan_id": 0,
-			"scan": map[string]interface{}{
-				"target": req.Target, "scan_type": req.ScanType,
-				"status": "running", "total_assets": 0,
-			},
-		})
-	case <-ctx.Done():
-		writeJSON(w, map[string]interface{}{"status": "failed", "error": "request cancelled"})
-	}
+	// Run the full pipeline in background.
+	go func(sid int64) {
+		bgCtx := context.Background()
+		orch.Run(bgCtx, req, nil)
+	}(scanID)
+
+	// Return immediately with the scan ID so the frontend can navigate to the detail page.
+	writeJSON(w, map[string]interface{}{
+		"status":  "running",
+		"scan_id": scanID,
+		"scan": map[string]interface{}{
+			"id": scanID, "target": req.Target,
+			"scan_type": req.ScanType, "wordlist": req.Wordlist,
+			"ports": req.Ports, "status": "running",
+			"total_assets": 0, "alive_assets": 0,
+			"total_services": 0, "total_cves": 0,
+		},
+	})
 }
 
 func handleEASMScanProgress(w http.ResponseWriter, r *http.Request) {

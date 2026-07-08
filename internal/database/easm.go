@@ -28,11 +28,15 @@ func (r *sqliteEASMScanRepo) Get(ctx context.Context, id int64) (*DBEASMScan, er
 			critical_cves, high_cves, medium_cves, low_cves, kev_cves, avg_epss,
 			worker_count, scanshots, error_message, report_json
 		FROM easm_scans WHERE id = ?`, id)
+	var completedAt sql.NullString
 	s := &DBEASMScan{}
-	err := row.Scan(&s.ID, &s.Target, &s.ScanType, &s.Wordlist, &s.Ports, &s.StartedAt, &s.CompletedAt,
+	err := row.Scan(&s.ID, &s.Target, &s.ScanType, &s.Wordlist, &s.Ports, &s.StartedAt, &completedAt,
 		&s.DurationMs, &s.Status, &s.TotalAssets, &s.AliveAssets, &s.TotalServices, &s.TotalCVEs,
 		&s.CriticalCVEs, &s.HighCVEs, &s.MediumCVEs, &s.LowCVEs, &s.KEVCVEs, &s.AvgEPSS,
 		&s.WorkerCount, &s.Screenshots, &s.ErrorMessage, &s.ReportJSON)
+	if completedAt.Valid {
+		s.CompletedAt = completedAt.String
+	}
 	if err != nil {
 		return nil, fmt.Errorf("get easm scan %d: %w", id, err)
 	}
@@ -73,11 +77,15 @@ func (r *sqliteEASMScanRepo) List(ctx context.Context, limit int) ([]DBEASMScan,
 	var scans []DBEASMScan
 	for rows.Next() {
 		var s DBEASMScan
-		if err := rows.Scan(&s.ID, &s.Target, &s.ScanType, &s.Wordlist, &s.Ports, &s.StartedAt, &s.CompletedAt,
+		var completedAt sql.NullString
+		if err := rows.Scan(&s.ID, &s.Target, &s.ScanType, &s.Wordlist, &s.Ports, &s.StartedAt, &completedAt,
 			&s.DurationMs, &s.Status, &s.TotalAssets, &s.AliveAssets, &s.TotalServices, &s.TotalCVEs,
 			&s.CriticalCVEs, &s.HighCVEs, &s.MediumCVEs, &s.LowCVEs, &s.KEVCVEs, &s.AvgEPSS,
 			&s.WorkerCount, &s.Screenshots, &s.ErrorMessage, &s.ReportJSON); err != nil {
 			return nil, fmt.Errorf("scan easm row: %w", err)
+		}
+		if completedAt.Valid {
+			s.CompletedAt = completedAt.String
 		}
 		scans = append(scans, s)
 	}

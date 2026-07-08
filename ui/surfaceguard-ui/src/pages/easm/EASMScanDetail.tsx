@@ -49,11 +49,11 @@ export default function EASMScanDetail() {
     try {
       const [scans, assetsData, findingsData] = await Promise.all([
         listEASMScans(),
-        getEASMAssets(scanId),
+        getEASMAssets(scanId).catch(() => []),
         getEASMFindings(scanId).catch(() => []),
       ]);
       const s = scans.find((x: EASMScan) => x.id === scanId) || null;
-      setScan(s);
+      if (s) setScan(s);
       setAssets(assetsData);
       if (findingsData) setFindings(findingsData);
       if (s && (s.status === "completed" || s.status === "failed")) {
@@ -62,12 +62,12 @@ export default function EASMScanDetail() {
     } catch { /* poll retries */ } finally { setLoading(false); }
   }
 
-  if (loading) {
+  if (loading && !scan) {
     return <div className="flex items-center justify-center p-20"><Loader2 className="h-6 w-6 animate-spin text-[#3B82F6]" /></div>;
   }
 
   if (!scan) {
-    return <div className="p-6"><p className="text-[#94A3B8]">Scan not found</p><Button onClick={() => navigate("/easm")} variant="outline" size="sm" className="mt-3">Back</Button></div>;
+    return <div className="flex items-center justify-center p-20 space-x-2"><Loader2 className="h-5 w-5 animate-spin text-[#3B82F6]" /><span className="text-[#94A3B8] text-sm">Waiting for scan to appear...</span></div>;
   }
 
   const isRunning = scan.status === "running";
