@@ -120,7 +120,7 @@ export default function UpdatesPage() {
           ) : (
             <RefreshCw className="h-4 w-4 mr-2" />
           )}
-          {updating ? "Updating..." : "Update All Feeds"}
+          {updating ? "Updating..." : "Update Security Feeds"}
         </Button>} />
       </div>
 
@@ -141,7 +141,7 @@ export default function UpdatesPage() {
             </div>
             <div className="flex items-center gap-2 text-xs text-[#94A3B8]">
               <div className="h-2 w-2 rounded-full bg-[#3B82F6] animate-pulse" />
-              Downloading NVD CVE data — this may take several minutes
+              Downloading security feed data — this may take several minutes
             </div>
           </CardContent>
         </Card>
@@ -181,11 +181,6 @@ export default function UpdatesPage() {
           <CardTitle className="text-lg text-[#F8FAFC] flex items-center gap-2">
             <Globe className="h-5 w-5 text-[#3B82F6]" /> DNS Wordlists
           </CardTitle>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="border-[#0B1220] text-[#94A3B8] h-8" onClick={handleWlCheckUpdate} disabled={wlLoading}><RefreshCw className="h-3 w-3 mr-1" />Check</Button>
-            <Button variant="outline" size="sm" className="border-[#0B1220] text-[#94A3B8] h-8" onClick={handleWlVerify} disabled={wlLoading}><Shield className="h-3 w-3 mr-1" />Verify</Button>
-            <Button variant="outline" size="sm" className="border-red-500/30 text-red-400 hover:bg-red-500/10 h-8" onClick={handleWlDelete} disabled={wlLoading}><Trash2 className="h-3 w-3 mr-1" />Delete</Button>
-          </div>
         </CardHeader>
         <CardContent>
           {wlStatus ? (
@@ -193,12 +188,12 @@ export default function UpdatesPage() {
               <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
                 <div className="rounded-lg bg-[#0B1220] p-4">
                   <p className="text-xs text-[#94A3B8]">Status</p>
-                  <Badge variant="outline" className={`mt-1 text-xs ${wlStatus.status === "installed" ? "border-[#22C55E] text-[#22C55E]" : wlStatus.status === "update_available" ? "border-[#F59E0B] text-[#F59E0B]" : "border-[#F59E0B] text-[#F59E0B]"}`}>
-                    {wlStatus.installed ? (wlStatus.status === "update_available" ? "Update Available" : "Installed") : "Not Installed"}
-                  </Badge>
+                  <p className={`text-sm font-bold mt-1 ${wlStatus.installed ? (wlStatus.needs_update ? "text-[#F59E0B]" : "text-[#22C55E]") : "text-[#F59E0B]"}`}>
+                    {wlStatus.installed ? (wlStatus.needs_update ? "Update Available" : "Installed") : "Not Installed"}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-[#0B1220] p-4">
-                  <p className="text-xs text-[#94A3B8]">Current Version</p>
+                  <p className="text-xs text-[#94A3B8]">Installed Version</p>
                   <p className="text-lg font-bold text-[#F8FAFC]">{wlStatus.current_version || "—"}</p>
                 </div>
                 <div className="rounded-lg bg-[#0B1220] p-4">
@@ -226,11 +221,27 @@ export default function UpdatesPage() {
                   </div>
                 </div>
               )}
-              {!wlStatus.installed && (
-                <Button onClick={handleWlDownload} disabled={wlDownloading} className="bg-[#3B82F6] hover:bg-[#2563EB]">
-                  {wlDownloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                  {wlDownloading ? "Downloading..." : "Download Wordlists"}
-                </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" className="border-[#0B1220] text-[#94A3B8] h-8" onClick={handleWlCheckUpdate} disabled={wlLoading}><RefreshCw className="h-3 w-3 mr-1" />Check Updates</Button>
+                {wlStatus.installed ? (
+                  <Button onClick={handleWlDownload} disabled={wlDownloading} size="sm" className="bg-[#3B82F6] hover:bg-[#2563EB] h-8">
+                    {wlDownloading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                    {wlDownloading ? "Updating..." : "Update"}
+                  </Button>
+                ) : (
+                  <Button onClick={handleWlDownload} disabled={wlDownloading} size="sm" className="bg-[#3B82F6] hover:bg-[#2563EB] h-8">
+                    {wlDownloading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                    {wlDownloading ? "Downloading..." : "Download"}
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" className="border-[#0B1220] text-[#94A3B8] h-8" onClick={handleWlVerify} disabled={wlLoading}><Shield className="h-3 w-3 mr-1" />Verify</Button>
+                <Button variant="outline" size="sm" className="border-red-500/30 text-red-400 hover:bg-red-500/10 h-8" onClick={handleWlDelete} disabled={wlLoading}><Trash2 className="h-3 w-3 mr-1" />Delete Cache</Button>
+              </div>
+              {wlStatus.installed && !wlStatus.needs_update && (
+                <p className="text-xs text-[#22C55E] flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Already up-to-date</p>
+              )}
+              {wlStatus.installed && wlStatus.needs_update && (
+                <p className="text-xs text-[#F59E0B] flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Update available — latest: {wlStatus.latest_version}</p>
               )}
             </div>
           ) : (

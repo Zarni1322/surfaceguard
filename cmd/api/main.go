@@ -550,9 +550,11 @@ func handleWordlistStatus(w http.ResponseWriter, r *http.Request) {
 		mediumCount = m.WordlistCount(wordlist.SizeMedium)
 		largeCount = m.WordlistCount(wordlist.SizeLarge)
 	}
+	needsUpdate := meta.LatestVersion != "" && meta.LatestVersion != meta.CurrentVersion
 	writeJSON(w, map[string]interface{}{
 		"installed": installed, "status": m.Status(),
 		"current_version": meta.CurrentVersion, "latest_version": meta.LatestVersion,
+		"needs_update": needsUpdate,
 		"last_updated": meta.LastUpdated, "wordlists": meta.Wordlists,
 		"counts": map[string]int{"small": smallCount, "medium": mediumCount, "large": largeCount},
 	})
