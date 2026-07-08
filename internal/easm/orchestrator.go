@@ -80,8 +80,13 @@ func (o *Orchestrator) CreateScanRecord(ctx context.Context, req models.EASMScan
 	return o.db.EASMScan().Create(ctx, dbScan)
 }
 
-// Run executes the full EASM pipeline for a target.
+// Run executes the full EASM pipeline for a target. Creates a new scan record.
 func (o *Orchestrator) Run(ctx context.Context, req models.EASMScanRequest, progress ProgressFn) (*EASMResult, error) {
+	return o.runWithID(ctx, req, 0, progress)
+}
+
+// runWithID is the internal implementation that uses an existing scan ID.
+func (o *Orchestrator) runWithID(ctx context.Context, req models.EASMScanRequest, existingScanID int64, progress ProgressFn) (*EASMResult, error) {
 	if progress == nil {
 		progress = func(string, int, string) {}
 	}
@@ -89,21 +94,27 @@ func (o *Orchestrator) Run(ctx context.Context, req models.EASMScanRequest, prog
 	startTime := time.Now()
 	result := &EASMResult{Target: req.Target}
 
-	// Create the scan record.
-	progress("init", 0, "Creating scan record...")
-	dbScan := &database.DBEASMScan{
-		Target:      req.Target,
-		ScanType:    string(req.ScanType),
-		Wordlist:    string(req.Wordlist),
-		Ports:       string(req.Ports),
-		StartedAt:   startTime.UTC().Format(time.RFC3339),
-		Status:      "running",
-		WorkerCount: req.Workers,
-		Screenshots: boolToInt(req.Screenshots),
-	}
-	scanID, err := o.db.EASMScan().Create(ctx, dbScan)
-	if err != nil {
-		return nil, fmt.Errorf("create scan: %w", err)
+	// Create or use existing scan record.
+	var scanID int64
+	if existingScanID > 0 {
+		scanID = existingScanID
+	} else {
+		progress("init", 0, "Creating scan record...")
+		dbScan := &database.DBEASMScan{
+			Target:      req.Target,
+			ScanType:    string(req.ScanType),
+			Wordlist:    string(req.Wordlist),
+			Ports:       string(req.Ports),
+			StartedAt:   startTime.UTC().Format(time.RFC3339),
+			Status:      "running",
+			WorkerCount: req.Workers,
+			Screenshots: boolToInt(req.Screenshots),
+		}
+		var err error
+		scanID, err = o.db.EASMScan().Create(ctx, dbScan)
+		if err != nil {
+			return nil, fmt.Errorf("create scan: %w", err)
+		}
 	}
 	result.ScanID = scanID
 
@@ -372,11 +383,19 @@ func (o *Orchestrator) Run(ctx context.Context, req models.EASMScanRequest, prog
 	result.Services = allServices
 	result.Scan.TotalServices = len(allServices)
 
+	// Reload services from DB to get actual IDs for finding correlation.
+	dbServices, _ := o.db.EASMService().ListByScan(ctx, scanID)
+	svcIDMap := make(map[int64]int64) // assetID+port -> actual service ID
+	for _, ds := range dbServices {
+		key := ds.AssetID*100000 + int64(ds.Port)
+		svcIDMap[key] = ds.ID
+	}
+
 	// Step 5: CVE correlation (reuse matcher).
 	progress("cves", 96, fmt.Sprintf("Correlating %d services against CVE database...", len(allServices)))
 	var findingDB []database.DBEASMFinding
 
-	for i, svc := range allServices {
+	for _, svc := range allServices {
 		if svc.CPE23URI == "" {
 			continue
 		}
@@ -419,7 +438,7 @@ func (o *Orchestrator) Run(ctx context.Context, req models.EASMScanRequest, prog
 			}
 
 			cveFinding := models.EASMFinding{
-				ServiceID:      int64(i + 1), // will be corrected after DB insert
+				ServiceID:      int64(svc.Port), // temporarily store port for ID lookup below
 				ScanID:         scanID,
 				CVEID:          f.CVE.ID,
 				CVSSv3:         f.CVE.CVSSv3,
@@ -438,10 +457,20 @@ func (o *Orchestrator) Run(ctx context.Context, req models.EASMScanRequest, prog
 
 	// Persist findings.
 	if len(allFindings) > 0 {
-		// Map service IDs correctly.
 		for _, fi := range allFindings {
+			// Find actual service ID by matching port against DB services
+			svcID := int64(0)
+			for _, ds := range dbServices {
+				if int64(ds.Port) == fi.ServiceID {
+					svcID = ds.ID
+					break
+				}
+			}
+			if svcID == 0 {
+				continue
+			}
 			findingDB = append(findingDB, database.DBEASMFinding{
-				ServiceID:      fi.ServiceID,
+				ServiceID:      svcID,
 				ScanID:         scanID,
 				CVEID:          fi.CVEID,
 				CVSSv3:         fi.CVSSv3,
@@ -493,6 +522,11 @@ func (o *Orchestrator) Run(ctx context.Context, req models.EASMScanRequest, prog
 		scan.AliveAssets, scan.TotalServices, scan.TotalCVEs))
 
 	return result, nil
+}
+
+// RunWithScanID runs the EASM pipeline using an existing scan record.
+func (o *Orchestrator) RunWithScanID(ctx context.Context, req models.EASMScanRequest, scanID int64, progress ProgressFn) (*EASMResult, error) {
+	return o.runWithID(ctx, req, scanID, progress)
 }
 
 func (o *Orchestrator) failScan(ctx context.Context, scanID int64, errMsg string) {

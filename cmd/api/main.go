@@ -514,6 +514,7 @@ func main() {
 	mux.HandleFunc("/api/easm/scans/delete", handleEASMScansDelete)
 	mux.HandleFunc("/api/easm/assets", handleEASMAssets)
 	mux.HandleFunc("/api/easm/findings", handleEASMFindings)
+	mux.HandleFunc("/api/easm/findings/detail", handleEASMFindingsDetail)
 
 	addr := ":8080"
 	fmt.Printf("SurfaceGuard API server on %s\n", addr)
@@ -1125,10 +1126,10 @@ func handleEASMScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Run the full pipeline in background.
+	// Run the full pipeline in background using the pre-created scan ID.
 	go func(sid int64) {
 		bgCtx := context.Background()
-		orch.Run(bgCtx, req, nil)
+		orch.RunWithScanID(bgCtx, req, sid, nil)
 	}(scanID)
 
 	// Return immediately with the scan ID so the frontend can navigate to the detail page.
@@ -1291,6 +1292,68 @@ func handleEASMFindings(w http.ResponseWriter, r *http.Request) {
 	var result []models.EASMFinding
 	for _, f := range findings {
 		result = append(result, *dbEASMFindingToModel(&f))
+	}
+	writeJSON(w, result)
+}
+
+func handleEASMFindingsDetail(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	cfg := loadConfigOrPanic()
+	scanID, err := strconv.ParseInt(r.URL.Query().Get("scan_id"), 10, 64)
+	if err != nil {
+		http.Error(w, "scan_id required", 400)
+		return
+	}
+	dbPath, err := cfg.ResolveDatabasePath()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	db, err := database.NewSQLiteDatabase(ctx, dbPath)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	defer db.Close()
+	enriched, err := db.EASMFinding().ListByScanWithAsset(ctx, scanID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	type ag struct {
+		Hostname string               `json:"hostname"`
+		IP       string               `json:"ip"`
+		Findings []models.EASMFinding `json:"findings"`
+		CVECount int                  `json:"cve_count"`
+	}
+	groups := make(map[string]*ag)
+	order := make([]string, 0)
+	for _, e := range enriched {
+		f := models.EASMFinding{
+			ID: e.ID, ServiceID: e.ServiceID, ScanID: e.ScanID, CVEID: e.CVEID,
+			CVSSv3: e.CVSSv3, CVSSv2: e.CVSSv2, Severity: e.Severity, Description: e.Description,
+			IsKEV: e.IsKEV == 1, EPSSScore: e.EPSSScore, EPSSPercentile: e.EPSSPercentile,
+			MatchedCPE: e.MatchedCPE, MatchedVersion: e.MatchedVersion,
+		}
+		if _, ok := groups[e.Hostname]; !ok {
+			groups[e.Hostname] = &ag{Hostname: e.Hostname, Findings: []models.EASMFinding{}, CVECount: 0}
+			order = append(order, e.Hostname)
+		}
+		groups[e.Hostname].Findings = append(groups[e.Hostname].Findings, f)
+		groups[e.Hostname].CVECount++
+	}
+	assets, _ := db.EASMAsset().ListByScan(ctx, scanID)
+	for _, a := range assets {
+		if g, ok := groups[a.Hostname]; ok && g.IP == "" {
+			g.IP = a.IPAddress
+		}
+	}
+	result := make([]ag, 0, len(order))
+	for _, h := range order {
+		if g, ok := groups[h]; ok {
+			result = append(result, *g)
+		}
 	}
 	writeJSON(w, result)
 }

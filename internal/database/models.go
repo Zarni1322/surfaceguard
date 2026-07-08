@@ -250,3 +250,11 @@ type DBEASMFinding struct {
 	MatchedCPE     string   `db:"matched_cpe"`
 	MatchedVersion string   `db:"matched_version"`
 }
+
+// EnrichedFinding includes asset hostname and port alongside finding data.
+type EnrichedFinding struct {
+	DBEASMFinding
+	Hostname string `db:"hostname"`
+	Port     int    `db:"port"`
+	Service  string `db:"service"`
+}

@@ -264,6 +264,8 @@ type EASMFindingRepository interface {
 	ListByService(ctx context.Context, serviceID int64) ([]DBEASMFinding, error)
 	// CountByScan returns the number of findings for a scan.
 	CountByScan(ctx context.Context, scanID int64) (int, error)
+	// ListByScanWithAsset returns findings enriched with asset hostname and port.
+	ListByScanWithAsset(ctx context.Context, scanID int64) ([]EnrichedFinding, error)
 	// CountBySeverity returns finding counts grouped by severity for a scan.
 	CountBySeverity(ctx context.Context, scanID int64) (map[string]int, error)
 }

@@ -502,6 +502,22 @@ type EASMFinding struct {
 	MatchedVersion string   `json:"matched_version"`
 }
 
+// EASMEnrichedFinding includes asset hostname and port alongside the finding.
+type EASMEnrichedFinding struct {
+	EASMFinding
+	Hostname string `json:"hostname"`
+	Port     int    `json:"port"`
+	Service  string `json:"service"`
+}
+
+// EASMAssetFindings groups findings by asset for dashboard display.
+type EASMAssetFindings struct {
+	Hostname string        `json:"hostname"`
+	IP       string        `json:"ip"`
+	Findings []EASMFinding `json:"findings"`
+	CVECount int           `json:"cve_count"`
+}
+
 // EASMScanProgress is streamed via SSE during an EASM scan.
 type EASMScanProgress struct {
 	Step        string `json:"step"`

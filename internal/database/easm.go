@@ -327,7 +327,7 @@ func (r *sqliteEASMFindingRepo) ListByScan(ctx context.Context, scanID int64) ([
 		return nil, err
 	}
 	defer rows.Close()
-	var findings []DBEASMFinding
+	findings := make([]DBEASMFinding, 0)
 	for rows.Next() {
 		var f DBEASMFinding
 		if err := rows.Scan(&f.ID, &f.ServiceID, &f.ScanID, &f.CVEID, &f.CVSSv3, &f.CVSSv2, &f.Severity, &f.Description, &f.IsKEV, &f.EPSSScore, &f.EPSSPercentile, &f.MatchedCPE, &f.MatchedVersion); err != nil {
@@ -338,6 +338,33 @@ func (r *sqliteEASMFindingRepo) ListByScan(ctx context.Context, scanID int64) ([
 	return findings, rows.Err()
 }
 
+func (r *sqliteEASMFindingRepo) ListByScanWithAsset(ctx context.Context, scanID int64) ([]EnrichedFinding, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT f.id, f.service_id, f.scan_id, f.cve_id, f.cvss_v3, f.cvss_v2, f.severity,
+			f.description, f.is_kev, f.epss_score, f.epss_percentile, f.matched_cpe, f.matched_version,
+			a.hostname, sv.port, sv.service
+		FROM easm_findings f
+		JOIN easm_services sv ON sv.id = f.service_id
+		JOIN easm_assets a ON a.id = sv.asset_id
+		WHERE f.scan_id = ?
+		ORDER BY a.hostname, sv.port, f.cvss_v3 DESC NULLS LAST`, scanID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	enriched := make([]EnrichedFinding, 0)
+	for rows.Next() {
+		var e EnrichedFinding
+		if err := rows.Scan(&e.ID, &e.ServiceID, &e.ScanID, &e.CVEID, &e.CVSSv3, &e.CVSSv2, &e.Severity,
+			&e.Description, &e.IsKEV, &e.EPSSScore, &e.EPSSPercentile, &e.MatchedCPE, &e.MatchedVersion,
+			&e.Hostname, &e.Port, &e.Service); err != nil {
+			return nil, err
+		}
+		enriched = append(enriched, e)
+	}
+	return enriched, rows.Err()
+}
+
 func (r *sqliteEASMFindingRepo) ListByService(ctx context.Context, serviceID int64) ([]DBEASMFinding, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, service_id, scan_id, cve_id, cvss_v3, cvss_v2, severity, description, is_kev, epss_score, epss_percentile, matched_cpe, matched_version
@@ -346,7 +373,7 @@ func (r *sqliteEASMFindingRepo) ListByService(ctx context.Context, serviceID int
 		return nil, err
 	}
 	defer rows.Close()
-	var findings []DBEASMFinding
+	findings := make([]DBEASMFinding, 0)
 	for rows.Next() {
 		var f DBEASMFinding
 		if err := rows.Scan(&f.ID, &f.ServiceID, &f.ScanID, &f.CVEID, &f.CVSSv3, &f.CVSSv2, &f.Severity, &f.Description, &f.IsKEV, &f.EPSSScore, &f.EPSSPercentile, &f.MatchedCPE, &f.MatchedVersion); err != nil {
