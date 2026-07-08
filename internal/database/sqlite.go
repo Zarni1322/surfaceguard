@@ -855,7 +855,7 @@ func (r *sqliteMetadataRepo) List(ctx context.Context) ([]DBMetadata, error) {
 	}
 	defer rows.Close()
 
-	var items []DBMetadata
+	items := make([]DBMetadata, 0)
 	for rows.Next() {
 		var m DBMetadata
 		if err := rows.Scan(&m.Key, &m.Value); err != nil {
@@ -981,7 +981,7 @@ func (r *sqliteCredentialProfileRepo) List(ctx context.Context) ([]DBCredentialP
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DBCredentialProfile
+	items := make([]DBCredentialProfile, 0)
 	for rows.Next() {
 		var p DBCredentialProfile
 		if err := rows.Scan(&p.ID, &p.Name, &p.Protocol, &p.Host, &p.Port, &p.Username, &p.AuthMethod, &p.Credential1, &p.Credential2, &p.Credential3, &p.CreatedAt, &p.UpdatedAt); err != nil {
@@ -1074,7 +1074,7 @@ func (r *sqliteAssetInventoryRepo) List(ctx context.Context) ([]DBAssetInventory
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DBAssetInventory
+	items := make([]DBAssetInventory, 0)
 	for rows.Next() {
 		var a DBAssetInventory
 		if err := rows.Scan(&a.ID, &a.Hostname, &a.IP, &a.OS, &a.Distro, &a.KernelVersion, &a.Architecture, &a.AssetType, &a.RiskScore, &a.LastSeen, &a.LastScan); err != nil {
@@ -1116,7 +1116,7 @@ func (r *sqliteAssessmentResultRepo) List(ctx context.Context, limit int) ([]DBA
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DBAssessmentResult
+	items := make([]DBAssessmentResult, 0)
 	for rows.Next() {
 		var ar DBAssessmentResult
 		if err := rows.Scan(&ar.ID, &ar.Target, &ar.ProfileID, &ar.Protocol, &ar.StartedAt, &ar.Duration, &ar.ResultJSON, &ar.Status); err != nil {
@@ -1143,7 +1143,7 @@ func (r *sqliteAssessmentResultRepo) ListByTarget(ctx context.Context, target st
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DBAssessmentResult
+	items := make([]DBAssessmentResult, 0)
 	for rows.Next() {
 		var ar DBAssessmentResult
 		if err := rows.Scan(&ar.ID, &ar.Target, &ar.ProfileID, &ar.Protocol, &ar.StartedAt, &ar.Duration, &ar.ResultJSON, &ar.Status); err != nil {
@@ -1176,7 +1176,7 @@ func (r *sqliteInstalledPackageRepo) ListByAsset(ctx context.Context, assetID in
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DBInstalledPackage
+	items := make([]DBInstalledPackage, 0)
 	for rows.Next() {
 		var p DBInstalledPackage
 		if err := rows.Scan(&p.ID, &p.AssetID, &p.Name, &p.Version, &p.Arch, &p.CPE23URI, &p.Status, &p.UpdatedAt); err != nil {
@@ -1240,7 +1240,7 @@ func (r *sqliteInstalledSoftwareRepo) ListByAsset(ctx context.Context, assetID i
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DBInstalledSoftware
+	items := make([]DBInstalledSoftware, 0)
 	for rows.Next() {
 		var s DBInstalledSoftware
 		if err := rows.Scan(&s.ID, &s.AssetID, &s.Name, &s.Version, &s.Vendor, &s.InstallDate, &s.CPE23URI, &s.UpdatedAt); err != nil {
@@ -1289,7 +1289,7 @@ func (r *sqliteSecurityFindingRepo) ListByAssessment(ctx context.Context, assess
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DBSecurityFinding
+	items := make([]DBSecurityFinding, 0)
 	for rows.Next() {
 		var f DBSecurityFinding
 		if err := rows.Scan(&f.ID, &f.AssessmentID, &f.CheckID, &f.Name, &f.Severity, &f.Status, &f.Evidence); err != nil {
@@ -1321,7 +1321,7 @@ func (r *sqliteCredentialValidationRepo) ListByProfile(ctx context.Context, prof
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DBCredentialValidation
+	items := make([]DBCredentialValidation, 0)
 	for rows.Next() {
 		var v DBCredentialValidation
 		if err := rows.Scan(&v.ID, &v.ProfileID, &v.Target, &v.ResultJSON, &v.Status, &v.TestedAt); err != nil {
