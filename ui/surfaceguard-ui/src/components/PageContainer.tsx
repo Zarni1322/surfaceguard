@@ -8,7 +8,7 @@ interface PageContainerProps {
 
 export default function PageContainer({ children, className }: PageContainerProps) {
   return (
-    <div className={cn("p-3 md:p-4 lg:p-5 xl:p-6 2xl:p-8", className)}>
+    <div className={cn("grid grid-cols-12 gap-3 md:gap-4 lg:gap-5 p-3 md:p-4 lg:p-5 xl:p-6 2xl:p-8", className)}>
       {children}
     </div>
   );
