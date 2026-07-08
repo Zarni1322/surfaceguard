@@ -253,13 +253,13 @@ export default function UpdatesPage() {
         </CardContent>
       </Card>
 
-      {/* DB Summary */}
+      {/* Database Summary — moved after feeds, before wordlists */}
       <Card className="border-[#1E293B] bg-[#1E293B]">
         <CardHeader>
           <CardTitle className="text-lg text-[#F8FAFC]">Database Summary</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
             <div className="rounded-lg bg-[#0B1220] p-4">
               <p className="text-xs text-[#94A3B8]">Schema</p>
               <p className="text-lg font-bold text-[#F8FAFC]">v{dbInfo?.schema_version ?? "—"}</p>
@@ -269,12 +269,24 @@ export default function UpdatesPage() {
               <p className="text-lg font-bold text-[#3B82F6]">{(dbInfo?.cve_count ?? 0).toLocaleString()}</p>
             </div>
             <div className="rounded-lg bg-[#0B1220] p-4">
+              <p className="text-xs text-[#94A3B8]">CPEs</p>
+              <p className="text-lg font-bold text-[#8B5CF6]">{(dbInfo?.cpe_count ?? 0).toLocaleString()}</p>
+            </div>
+            <div className="rounded-lg bg-[#0B1220] p-4">
               <p className="text-xs text-[#94A3B8]">KEV</p>
               <p className="text-lg font-bold text-[#F59E0B]">{(dbInfo?.kev_count ?? 0).toLocaleString()}</p>
             </div>
             <div className="rounded-lg bg-[#0B1220] p-4">
               <p className="text-xs text-[#94A3B8]">EPSS</p>
               <p className="text-lg font-bold text-[#22C55E]">{(dbInfo?.epss_count ?? 0).toLocaleString()}</p>
+            </div>
+            <div className="rounded-lg bg-[#0B1220] p-4">
+              <p className="text-xs text-[#94A3B8]">Integrity</p>
+              <p className="text-lg font-bold text-[#F8FAFC]">{dbInfo?.integrity_ok ? "Verified" : "Unknown"}</p>
+            </div>
+            <div className="rounded-lg bg-[#0B1220] p-4 sm:col-span-2 lg:col-span-1">
+              <p className="text-xs text-[#94A3B8]">Last Updated</p>
+              <p className="text-sm font-bold text-[#F8FAFC]">{lastUpdate}</p>
             </div>
           </div>
         </CardContent>
