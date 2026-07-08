@@ -192,4 +192,14 @@ export async function deleteAssessmentHistory(): Promise<void> {
   await api.delete("/assessment/history/delete");
 }
 
+export async function getEASMAssetDetail(assetId: number): Promise<any> {
+  const { data } = await api.get("/easm/asset/detail", { params: { asset_id: assetId } });
+  return data;
+}
+
+export async function getEASMDashboardStats(): Promise<any> {
+  const { data } = await api.get("/easm/dashboard");
+  return data;
+}
+
 export default api;

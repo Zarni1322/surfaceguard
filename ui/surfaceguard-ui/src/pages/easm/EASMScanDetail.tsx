@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Globe, Shield, Monitor, Loader2 } from "lucide-react";
-import { listEASMScans, getEASMAssets, getEASMFindings } from "@/api/client";
+import { listEASMScans, getEASMAssets, getEASMFindings, getEASMAssetDetail } from "@/api/client";
 import type { EASMScan, EASMAsset, EASMFinding } from "@/types";
 import { toast } from "sonner";
 import SeverityBadge from "@/components/SeverityBadge";
@@ -37,6 +37,9 @@ export default function EASMScanDetail() {
   const [findings, setFindings] = useState<EASMFinding[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"assets" | "findings" | "overview">("overview");
+  const [selectedAsset, setSelectedAsset] = useState<any | null>(null);
+  const [assetDetail, setAssetDetail] = useState<any | null>(null);
+  const [assetLoading, setAssetLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -183,7 +186,7 @@ export default function EASMScanDetail() {
         </>
       )}
 
-      {tab === "assets" && (
+      {tab === "assets" && !selectedAsset && (
         <Card className="bg-[#111827] border-[#1E293B]">
           <CardContent className="p-3">
             <div className="overflow-x-auto">
@@ -194,15 +197,22 @@ export default function EASMScanDetail() {
                   <th className="text-left p-2 text-[#94A3B8]">CNAME</th>
                   <th className="text-left p-2 text-[#94A3B8]">Alive</th>
                   <th className="text-left p-2 text-[#94A3B8]">Source</th>
+                  <th className="text-left p-2 text-[#94A3B8]">CVEs</th>
                 </tr></thead>
                 <tbody>
                   {assets.map((a) => (
-                    <tr key={a.id} className="border-b border-[#1E293B] hover:bg-[#1E293B]/50">
-                      <td className="p-2 text-[#F8FAFC]">{a.hostname}</td>
+                    <tr key={a.id} className="border-b border-[#1E293B] hover:bg-[#3B82F6]/10 cursor-pointer"
+                        onClick={async () => {
+                          setSelectedAsset(a);
+                          setAssetLoading(true);
+                          try { const d = await getEASMAssetDetail(a.id); setAssetDetail(d); } catch {} finally { setAssetLoading(false); }
+                        }}>
+                      <td className="p-2 text-[#3B82F6] font-medium">{a.hostname}</td>
                       <td className="p-2 text-[#94A3B8]">{a.ip_address || "-"}</td>
                       <td className="p-2 text-[#94A3B8]">{a.cname || "-"}</td>
                       <td className="p-2">{a.is_alive ? <span className="text-green-400">● Alive</span> : <span className="text-[#64748B]">○</span>}</td>
                       <td className="p-2 text-[#94A3B8]">{a.source}</td>
+                      <td className="p-2"><span className="text-[#3B82F6] font-medium">"?"</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -210,6 +220,81 @@ export default function EASMScanDetail() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Asset Detail Panel */}
+      {tab === "assets" && selectedAsset && (
+        <div>
+          <button onClick={() => { setSelectedAsset(null); setAssetDetail(null); }} className="text-xs text-[#3B82F6] hover:underline mb-3">← Back to assets</button>
+          {assetLoading ? <p className="text-[#94A3B8] text-sm">Loading...</p> : assetDetail ? (
+            <>
+              <div className="grid grid-cols-4 gap-3 mb-3">
+                <div className="bg-[#111827] border border-[#1E293B] rounded-lg p-3">
+                  <p className="text-xs text-[#94A3B8]">Hostname</p>
+                  <p className="text-sm font-bold text-[#F8FAFC]">{assetDetail.hostname}</p>
+                  {assetDetail.ip_address && <p className="text-xs text-[#64748B]">{assetDetail.ip_address}</p>}
+                </div>
+                <div className="bg-[#111827] border border-[#1E293B] rounded-lg p-3">
+                  <p className="text-xs text-[#94A3B8]">Risk Score</p>
+                  <p className={`text-lg font-bold ${assetDetail.risk_level === "CRITICAL" ? "text-red-500" : assetDetail.risk_level === "HIGH" ? "text-orange-400" : assetDetail.risk_level === "MEDIUM" ? "text-yellow-400" : "text-green-400"}`}>{assetDetail.risk_score.toFixed(0)}/100</p>
+                  <p className="text-xs text-[#64748B]">{assetDetail.risk_level}</p>
+                </div>
+                <div className="bg-[#111827] border border-[#1E293B] rounded-lg p-3">
+                  <p className="text-xs text-[#94A3B8]">Services</p>
+                  <p className="text-lg font-bold text-[#F8FAFC]">{assetDetail.services?.length || 0}</p>
+                  {assetDetail.technologies?.length > 0 && <p className="text-xs text-[#64748B]">{assetDetail.technologies.join(", ")}</p>}
+                </div>
+                <div className="bg-[#111827] border border-[#1E293B] rounded-lg p-3">
+                  <p className="text-xs text-[#94A3B8]">Vulnerabilities</p>
+                  <p className="text-lg font-bold text-[#3B82F6]">{assetDetail.cve_count}</p>
+                  {assetDetail.kev_count > 0 && <p className="text-xs text-red-400">{assetDetail.kev_count} KEV</p>}
+                </div>
+              </div>
+
+              {assetDetail.services?.length > 0 && (
+                <Card className="bg-[#111827] border-[#1E293B] mb-3">
+                  <CardHeader className="pb-3"><CardTitle className="text-sm text-[#F8FAFC]">Services ({assetDetail.services.length})</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto"><table className="w-full text-sm">
+                      <thead><tr className="border-b border-[#1E293B]">
+                        <th className="text-left p-2 text-[#94A3B8]">Port</th><th className="text-left p-2 text-[#94A3B8]">Service</th>
+                        <th className="text-left p-2 text-[#94A3B8]">Product</th><th className="text-left p-2 text-[#94A3B8]">Version</th>
+                        <th className="text-left p-2 text-[#94A3B8]">CPE</th>
+                      </tr></thead>
+                      <tbody>{assetDetail.services.map((s: any) => (
+                        <tr key={s.id} className="border-b border-[#1E293B]/50">
+                          <td className="p-2 font-mono text-sm text-[#F8FAFC]">{s.port}</td>
+                          <td className="p-2 text-sm text-[#F8FAFC]">{s.service}</td>
+                          <td className="p-2 text-sm text-[#94A3B8]">{s.product || "—"}</td>
+                          <td className="p-2 text-sm text-[#94A3B8]">{s.version || "—"}</td>
+                          <td className="p-2 text-xs text-[#64748B] truncate max-w-[200px]">{s.cpe_2_3_uri || "—"}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table></div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {assetDetail.findings?.length > 0 && (
+                <Card className="bg-[#111827] border-[#1E293B]">
+                  <CardHeader className="pb-3"><CardTitle className="text-sm text-[#F8FAFC]">Findings ({assetDetail.cve_count})</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="space-y-1.5">{assetDetail.findings.slice(0, 20).map((f: any, i: number) => (
+                      <div key={i} className="flex items-center gap-2.5 p-2.5 bg-[#0B1220] rounded-lg">
+                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${f.severity === "CRITICAL" ? "bg-red-500" : f.severity === "HIGH" ? "bg-orange-500" : f.severity === "MEDIUM" ? "bg-yellow-500" : "bg-blue-500"}`} />
+                        <div className="flex-1 min-w-0">
+                          <a href={`https://nvd.nist.gov/vuln/detail/${f.cve_id}`} target="_blank" className="font-medium text-xs text-[#3B82F6] hover:underline">{f.cve_id}</a>
+                          <p className="text-xs text-[#94A3B8] truncate">{f.description?.substring(0, 120)}</p>
+                        </div>
+                        <div className="text-right shrink-0"><p className="text-xs font-medium text-[#F8FAFC]">{f.cvss_v3?.toFixed(1) || "N/A"}</p><SeverityBadge severity={f.severity} /></div>
+                      </div>
+                    ))}</div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          ) : <p className="text-[#94A3B8] text-sm">Loading asset...</p>}
+        </div>
       )}
 
       {tab === "findings" && (
