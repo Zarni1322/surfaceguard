@@ -146,6 +146,7 @@ export default function UpdatesPage() {
       </div>
 
       <div className={colSpan(12)}>
+      <div className="space-y-6">
       {/* Real-time Progress Bar */}
       {updating && (
         <Card className="border-[#1E293B] bg-[#1E293B]">
@@ -313,6 +314,7 @@ export default function UpdatesPage() {
 
 
       {/* Wordlists Section */}
+      </div>
       </div>
     </PageContainer>
   );
