@@ -330,9 +330,14 @@ func (u *Updater) updateCVE(ctx context.Context, lastUpdate string) (int, int, e
 
 		body, err := u.fetchWithRetry(ctx, url)
 		if err != nil {
-			u.checkpoint.Save(ctx, FeedNVD, StateDownloading, StepDownloading, int64(si), "", "", fmt.Sprintf("page %d fetch failed", page))
-			u.recordHistory(start, FeedNVD, "failed", inserted, updated, err, u.db)
-			return inserted, updated, fmt.Errorf("page %d: %w", page, err)
+			u.logger.Warn("NVD page fetch failed, skipping", "page", page, "startIndex", si, "error", err)
+			fmt.Printf("\r  NVD: page %d failed, skipping (%v)", page+1, err)
+			page++
+			u.checkpoint.Save(ctx, FeedNVD, StateDownloading, StepDownloading, int64(si+100), "", "", fmt.Sprintf("page %d skipped", page))
+			if si+100 >= 363800 {
+				break
+			}
+			continue
 		}
 
 		var resp cveResponse
