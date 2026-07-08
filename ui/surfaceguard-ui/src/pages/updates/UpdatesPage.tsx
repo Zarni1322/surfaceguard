@@ -39,35 +39,56 @@ export default function UpdatesPage() {
     saveUpdState({ updating: s.updating ?? updating, progress: s.progress ?? progress, progressText: s.progressText ?? progressText, phase: s.phase ?? phase });
   }
 
+  useEffect(() => {
+    loadWlStatus();
+    // Re-attach to existing EventSource on mount (after navigation back)
+    if (persistentES && updating) {
+      const es = persistentES;
+      if (es.readyState === EventSource.CLOSED) {
+        // Update finished while we were away
+        setPhase("complete");
+        setUpdating(false);
+        setProgress(100);
+        setProgressText("Update complete");
+      } else {
+        es.onmessage = handleEventSourceMessage;
+        es.onerror = handleEventSourceError;
+      }
+    }
+  }, []);
+
+  function handleEventSourceMessage(event: MessageEvent) {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === "progress") { upd({ progress: data.percent, progressText: data.text }); }
+      else if (data.type === "result" && data.status === "completed") {
+        upd({ progress: 100, progressText: "Update complete", phase: "complete", updating: false });
+        if (persistentES) persistentES.close();
+        refetch(); toast.success("All feeds updated");
+      }
+    } catch { /* ignore */ }
+  }
+
+  function handleEventSourceError() {
+    if (progress >= 100) return;
+    upd({ progressText: "Connection lost — update may still be running", updating: false });
+    if (persistentES) persistentES.close();
+  }
+
   const handleUpdate = () => {
+    if (updating) return; // Prevent concurrent updates
     upd({ updating: true, progress: 0, progressText: "Starting update...", phase: "downloading" });
 
     const es = new EventSource("/api/update");
     persistentES = es;
 
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "progress") { upd({ progress: data.percent, progressText: data.text }); }
-        else if (data.type === "result" && data.status === "completed") {
-          upd({ progress: 100, progressText: "Update complete", phase: "complete", updating: false });
-          es.close(); refetch(); toast.success("All feeds updated");
-        }
-      } catch { /* ignore */ }
-    };
-
-    es.onerror = () => {
-      if (progress >= 100) return;
-      upd({ progressText: "Connection lost — update may still be running", updating: false });
-      es.close();
-    };
+    es.onmessage = handleEventSourceMessage;
+    es.onerror = handleEventSourceError;
   };
 
   const [wlStatus, setWlStatus] = useState<any>(null);
   const [wlLoading, setWlLoading] = useState(false);
   const [wlDownloading, setWlDownloading] = useState(false);
-
-  useEffect(() => { loadWlStatus(); }, []);
 
   async function loadWlStatus() {
     try { setWlStatus(await getWordlistStatus()); } catch {}
