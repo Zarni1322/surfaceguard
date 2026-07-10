@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Globe, Shield, Monitor, Loader2 } from "lucide-react";
-import { listEASMScans, getEASMAssets, getEASMFindings, getEASMAssetDetail } from "@/api/client";
+import { listEASMScans, getEASMAssets, getEASMFindings, getEASMFindingsDetail, getEASMAssetDetail } from "@/api/client";
 import type { EASMScan, EASMAsset, EASMFinding } from "@/types";
 import { toast } from "sonner";
 import SeverityBadge from "@/components/SeverityBadge";
@@ -35,6 +35,7 @@ export default function EASMScanDetail() {
   const [scan, setScan] = useState<EASMScan | null>(null);
   const [assets, setAssets] = useState<EASMAsset[]>([]);
   const [findings, setFindings] = useState<EASMFinding[]>([]);
+  const [assetFindings, setAssetFindings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"assets" | "findings" | "overview">("overview");
   const [selectedAsset, setSelectedAsset] = useState<any | null>(null);
@@ -55,10 +56,11 @@ export default function EASMScanDetail() {
 
   async function loadData(scanId: number) {
     try {
-      const [scans, assetsData, findingsData] = await Promise.all([
+      const [scans, assetsData, findingsData, assetFindingsData] = await Promise.all([
         listEASMScans(),
         getEASMAssets(scanId).catch(() => []),
         getEASMFindings(scanId).catch(() => []),
+        getEASMFindingsDetail(scanId).catch(() => []),
       ]);
       const s = scans?.find((x: EASMScan) => x.id === scanId) || null;
       if (s) {
@@ -67,6 +69,7 @@ export default function EASMScanDetail() {
       }
       setAssets(assetsData || []);
       setFindings(findingsData || []);
+      setAssetFindings(assetFindingsData || []);
       if (s && (s.status === "completed" || s.status === "failed")) {
         if (pollRef.current) clearInterval(pollRef.current);
       }
@@ -168,6 +171,28 @@ export default function EASMScanDetail() {
             </CardContent>
           </Card>
           <Card className="bg-[#111827] border-[#1E293B]">
+            <CardHeader className="pb-3"><CardTitle className="text-sm text-[#F8FAFC]">Findings by Asset ({assetFindings.length} assets)</CardTitle></CardHeader>
+            <CardContent>
+              {assetFindings.length === 0 ? <p className="text-[#94A3B8] text-sm">No findings</p>
+                : <div className="space-y-1.5">{assetFindings.slice(0, 10).map((g: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between p-2 bg-[#0B1220] rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-[#F8FAFC]">{g.hostname}</p>
+                        {g.ip && <p className="text-xs text-[#64748B]">{g.ip}</p>}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs text-[#3B82F6] font-medium">{g.cve_count} CVEs</p>
+                        <div className="flex gap-1 mt-0.5">
+                          {[...new Set(g.findings.map((f: any) => f.severity))].filter(Boolean).slice(0, 3).map((s: any) => (
+                            <SeverityBadge key={s} severity={s} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}</div>}
+            </CardContent>
+          </Card>
+          <Card className="bg-[#111827] border-[#1E293B]">
             <CardHeader className="pb-3"><CardTitle className="text-sm text-[#F8FAFC]">Top Findings</CardTitle></CardHeader>
             <CardContent>
               {findings.length === 0 ? <p className="text-[#94A3B8] text-sm">No findings</p>
@@ -212,7 +237,11 @@ export default function EASMScanDetail() {
                       <td className="p-2 text-[#94A3B8]">{a.cname || "-"}</td>
                       <td className="p-2">{a.is_alive ? <span className="text-green-400">● Alive</span> : <span className="text-[#64748B]">○</span>}</td>
                       <td className="p-2 text-[#94A3B8]">{a.source}</td>
-                      <td className="p-2"><span className="text-[#3B82F6] font-medium">"?"</span></td>
+                      <td className="p-2">
+                        <span className="text-[#3B82F6] font-medium">
+                          {assetFindings.find((g: any) => g.hostname === a.hostname)?.cve_count ?? 0}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

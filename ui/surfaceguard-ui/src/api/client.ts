@@ -184,6 +184,18 @@ export async function getEASMFindings(scanId: number): Promise<EASMFinding[]> {
   return data;
 }
 
+export interface EASMAssetFindingsGroup {
+  hostname: string;
+  ip: string;
+  findings: EASMFinding[];
+  cve_count: number;
+}
+
+export async function getEASMFindingsDetail(scanId: number): Promise<EASMAssetFindingsGroup[]> {
+  const { data } = await api.get<EASMAssetFindingsGroup[]>("/easm/findings/detail", { params: { scan_id: scanId } });
+  return data;
+}
+
 export async function deleteEASMScans(): Promise<void> {
   await api.delete("/easm/scans/delete");
 }
