@@ -43,6 +43,12 @@ type DBCVE struct {
 	PublishedDate    time.Time `db:"published_date"`
 	LastModifiedDate time.Time `db:"last_modified_date"`
 	ReferencesJSON   string    `db:"references_json"` // JSON array of URLs
+	// NVD version affected range fields.
+	// Nullable strings — NULL means no bound for that side.
+	VersionStartIncluding *string `db:"version_start_including"`
+	VersionStartExcluding *string `db:"version_start_excluding"`
+	VersionEndIncluding   *string `db:"version_end_including"`
+	VersionEndExcluding   *string `db:"version_end_excluding"`
 }
 
 // DBKEV represents a row in the kev table.
@@ -126,6 +132,25 @@ type DBAssessmentResult struct {
 	Duration   string `db:"duration"`
 	ResultJSON string `db:"result_json"`
 	Status     string `db:"status"`
+}
+
+// DBScanHistory represents a row in the scan_history table.
+// This is the single source of truth for all completed scan records.
+type DBScanHistory struct {
+	ID         int64   `db:"id" json:"id,omitempty"`
+	Target     string  `db:"target" json:"target"`
+	StartedAt  string  `db:"started_at" json:"started_at"`
+	Duration   string  `db:"duration" json:"duration"`
+	PortsFound int     `db:"ports_found" json:"ports_found"`
+	Findings   int     `db:"findings" json:"findings"`
+	RiskScore  float64 `db:"risk_score" json:"risk_score"`
+	Status     string  `db:"status" json:"status"`
+	Critical   int     `db:"critical" json:"critical"`
+	High       int     `db:"high" json:"high"`
+	Medium     int     `db:"medium" json:"medium"`
+	Low        int     `db:"low" json:"low"`
+	Info       int     `db:"info" json:"info"`
+	ResultJSON string  `db:"result_json" json:"-"`
 }
 
 // DBInstalledPackage represents a row in the installed_packages table.

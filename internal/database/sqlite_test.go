@@ -31,8 +31,8 @@ func TestNewSQLiteDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Info failed: %v", err)
 	}
-	if info.SchemaVersion != 5 {
-		t.Errorf("expected schema version 2, got %d", info.SchemaVersion)
+	if info.SchemaVersion != 8 {
+		t.Errorf("expected schema version 8, got %d", info.SchemaVersion)
 	}
 }
 func TestVendorGetOrCreate(t *testing.T) {
@@ -342,8 +342,8 @@ func TestInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Info failed: %v", err)
 	}
-	if info.SchemaVersion != 5 {
-		t.Errorf("expected schema version 2, got %d", info.SchemaVersion)
+	if info.SchemaVersion != 8 {
+		t.Errorf("expected schema version 8, got %d", info.SchemaVersion)
 	}
 }
 func TestVerify(t *testing.T) {

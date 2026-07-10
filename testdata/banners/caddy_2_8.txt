@@ -1,0 +1,7 @@
+HTTP/1.1 200 OK
+Date: Mon, 15 Jul 2026 10:00:00 GMT
+Server: Caddy/2.8.4
+Content-Type: text/html
+Content-Length: 500
+
+<html><body><h1>Caddy works!</h1></body></html>

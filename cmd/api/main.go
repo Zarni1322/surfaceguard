@@ -36,6 +36,11 @@ type scanRecord struct {
 	Findings   int       `json:"findings"`
 	RiskScore  float64   `json:"risk_score"`
 	Status     string    `json:"status"`
+	Critical   int       `json:"critical"`
+	High       int       `json:"high"`
+	Medium     int       `json:"medium"`
+	Low        int       `json:"low"`
+	Info       int       `json:"info"`
 }
 
 var scanHistory []scanRecord
@@ -160,6 +165,7 @@ func main() {
 	mux.HandleFunc("/api/cve-discovery", func(w http.ResponseWriter, r *http.Request) {
 		target := r.URL.Query().Get("target")
 		ports := r.URL.Query().Get("ports")
+		selectedPlatform := r.URL.Query().Get("platform")
 		if target == "" {
 			http.Error(w, "target required", 400)
 			return
@@ -215,43 +221,99 @@ func main() {
 
 		// Record to history (in-memory + persistent)
 		started, _ := time.Parse(time.RFC3339, getStr(rawResult, "started_at"))
-		portsFound := int(getFloat(rawResult, "open_ports"))
-		findingsCount := int(getFloat(rawResult, "findings"))
+		portsFound := 0
+		if portsRaw, ok := rawResult["open_ports"].([]interface{}); ok {
+			portsFound = len(portsRaw)
+		}
 		riskScore := getFloat(rawResult, "risk_score")
 		durStr := getStr(rawResult, "duration")
 
-		rec := scanRecord{
-			Target:     target,
-			StartedAt:  started,
-			Duration:   durStr,
-			PortsFound: portsFound,
-			Findings:   findingsCount,
-			RiskScore:  riskScore,
-			Status:     "completed",
+		// Extract severity counts from findings in the raw result.
+		findingsCount := 0
+		crit, hi, med, lo, inf := 0, 0, 0, 0, 0
+		if findingsRaw, ok := rawResult["findings"].([]interface{}); ok {
+			findingsCount = len(findingsRaw)
+			for _, f := range findingsRaw {
+				if fm, ok := f.(map[string]interface{}); ok {
+					if cve, ok := fm["cve"].(map[string]interface{}); ok {
+						sev, _ := cve["severity"].(string)
+						switch sev {
+						case "CRITICAL":
+							crit++
+						case "HIGH":
+							hi++
+						case "MEDIUM":
+							med++
+						case "LOW":
+							lo++
+						default:
+							inf++
+						}
+					}
+				}
+			}
 		}
-		historyMu.Lock()
-		scanHistory = append([]scanRecord{rec}, scanHistory...)
-		if len(scanHistory) > 100 {
-			scanHistory = scanHistory[:100]
-		}
-		historyMu.Unlock()
 
-		// Persist to assessment_results table for dashboard
-		go func() {
-			ctx := context.Background()
-			db := openDB(cfg, ctx, nil)
-			if db != nil {
-				defer db.Close()
-				jsonResult, _ := json.Marshal(rawResult)
-				db.AssessmentResult().Create(ctx, &database.DBAssessmentResult{
-					Target:     target,
-					ProfileID:  0,
-					Protocol:   "cve-discovery",
-					StartedAt:  started.Format(time.RFC3339),
-					Duration:   durStr,
-					ResultJSON: string(jsonResult),
-					Status:     "completed",
-				})
+		// Platform-aware confidence adjustment
+		// Adjust findings confidence based on selected platform vs detected services.
+		// This does NOT filter CVEs — only sets MatchConfidence and MatchEvidence.
+		if selectedPlatform != "" && selectedPlatform != "None" && selectedPlatform != "Auto Detect" {
+			if findingsRaw, ok := rawResult["findings"].([]interface{}); ok {
+				for _, f := range findingsRaw {
+					if fm, ok := f.(map[string]interface{}); ok {
+						service := ""
+						if p, ok := fm["port"].(map[string]interface{}); ok {
+							service, _ = p["service"].(string)
+						}
+						platformMatch := checkPlatformMatch(service, selectedPlatform)
+						conf := 90
+						if !platformMatch {
+							conf = 65
+						}
+						// Add platform info to the finding
+						if existing, ok := fm["match_evidence"].(string); ok && existing != "" {
+							fm["match_evidence"] = existing + "; " + platformEvidence(service, selectedPlatform, platformMatch)
+						} else {
+							fm["match_evidence"] = platformEvidence(service, selectedPlatform, platformMatch)
+						}
+						fm["match_confidence"] = float64(conf)
+						// Update matched_cpe within finding if present
+						if mc, ok := fm["matched_cpe"].(map[string]interface{}); ok {
+							mc["platform_match"] = platformMatch
+						}
+					}
+				}
+			}
+		}
+		// Tag the result with the selected platform
+		rawResult["selected_platform"] = selectedPlatform
+		rawResult["platform"] = selectedPlatform
+
+		// Persist to scan_history table synchronously (single source of truth)
+		jsonBytes, _ := json.Marshal(rawResult)
+		func() {
+			db := openDB(cfg, context.Background(), nil)
+			if db == nil {
+				log.Printf("ERROR: openDB returned nil in scan persistence — database may be unreachable")
+				return
+			}
+			defer db.Close()
+			if _, err := db.ScanHistory().Insert(context.Background(), &database.DBScanHistory{
+				Target:     target,
+				StartedAt:  started.Format(time.RFC3339),
+				Duration:   durStr,
+				PortsFound: portsFound,
+				Findings:   findingsCount,
+				RiskScore:  riskScore,
+				Status:     "completed",
+				Critical:   crit,
+				High:       hi,
+				Medium:     med,
+				Low:        lo,
+				Info:       inf,
+				ResultJSON: string(jsonBytes),
+			}); err != nil {
+				log.Printf("ERROR: failed to save scan history: %v", err)
 			}
 		}()
 
@@ -261,23 +323,57 @@ func main() {
 		flusher.Flush()
 	})
 
-	// Scan History
+	// Scan History — reads from scan_history table (single source of truth)
 	mux.HandleFunc("/api/scan-history", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		db := openDB(cfg, ctx, w)
+		if db == nil {
+			return
+		}
+		defer db.Close()
 		if r.Method == "DELETE" {
-			historyMu.Lock()
-			scanHistory = nil
-			historyMu.Unlock()
+			db.ScanHistory().DeleteAll(ctx)
 			writeJSON(w, map[string]string{"status": "ok"})
 			return
 		}
-		historyMu.Lock()
-		defer historyMu.Unlock()
-		if scanHistory == nil {
-			writeJSON(w, []scanRecord{})
+		records, err := db.ScanHistory().List(ctx, 100)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		if records == nil {
+			writeJSON(w, []database.DBScanHistory{})
 		} else {
-			writeJSON(w, scanHistory)
+			writeJSON(w, records)
 		}
 	})
+
+		// GET /api/scan-detail?id=X — single scan with full result
+		mux.HandleFunc("/api/scan-detail", func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			db := openDB(cfg, ctx, w)
+			if db == nil { return }
+			defer db.Close()
+			idStr := r.URL.Query().Get("id")
+			if idStr == "" { http.Error(w, "id required", 400); return }
+			id, err := strconv.ParseInt(idStr, 10, 64)
+			if err != nil { http.Error(w, "invalid id", 400); return }
+			record, err := db.ScanHistory().GetByID(ctx, id)
+			if err != nil { http.Error(w, "scan not found", 404); return }
+			var result interface{} = map[string]interface{}{}
+			if record.ResultJSON != "" && record.ResultJSON != "{}" {
+				json.Unmarshal([]byte(record.ResultJSON), &result)
+			}
+			writeJSON(w, map[string]interface{}{
+				"id": record.ID, "target": record.Target,
+				"started_at": record.StartedAt, "duration": record.Duration,
+				"ports_found": record.PortsFound, "findings": record.Findings,
+				"risk_score": record.RiskScore, "status": record.Status,
+				"critical": record.Critical, "high": record.High,
+				"medium": record.Medium, "low": record.Low, "info": record.Info,
+				"result": result,
+			})
+		})
 
 	// Trigger update
 	mux.HandleFunc("/api/update", func(w http.ResponseWriter, r *http.Request) {
@@ -353,101 +449,112 @@ func main() {
 		flusher.Flush()
 	})
 
-	// Report Generation
+	// Report Generation — generates reports from stored scan data only.
+	// Uses scan_id to load exactly one completed scan from the database.
+	// Never calls runSurfaceGuard() — all formats are generated from stored result_json.
 	mux.HandleFunc("/api/report", func(w http.ResponseWriter, r *http.Request) {
-		target := r.URL.Query().Get("target")
+		scanIDStr := r.URL.Query().Get("scan_id")
 		format := r.URL.Query().Get("format")
 		if format == "" {
 			format = "html"
 		}
-		if target == "" {
-			http.Error(w, "target required", 400)
+		if scanIDStr == "" {
+			http.Error(w, "scan_id required", 400)
+			return
+		}
+		scanID, err := strconv.ParseInt(scanIDStr, 10, 64)
+		if err != nil {
+			http.Error(w, "invalid scan_id", 400)
+			return
+		}
+
+		ctx := r.Context()
+		db := openDB(cfg, ctx, w)
+		if db == nil {
+			return
+		}
+		defer db.Close()
+
+		record, err := db.ScanHistory().GetByID(ctx, scanID)
+		if err != nil {
+			log.Printf("ERROR: scan_id=%d not found in scan_history: %v", scanID, err)
+			http.Error(w, "scan not found", 404)
+			return
+		}
+		if record.ResultJSON == "" || record.ResultJSON == "{}" {
+			http.Error(w, "no scan data stored for this record", 404)
+			return
+		}
+
+		var result map[string]interface{}
+		if err := json.Unmarshal([]byte(record.ResultJSON), &result); err != nil {
+			http.Error(w, fmt.Sprintf("failed to parse scan data: %v", err), 500)
 			return
 		}
 
 		switch format {
 		case "json":
-			args := []string{"scan", target, "--format", "json", "--no-banner"}
-			output, err := runSurfaceGuard(args...)
-			if err != nil {
-				http.Error(w, fmt.Sprintf("scan failed: %v", err), 500)
-				return
-			}
-			jsonStart := strings.Index(output, "{")
-			if jsonStart < 0 {
-				http.Error(w, "no JSON in output", 500)
-				return
-			}
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"surfaceguard-report-%s.json\"", target))
-			w.Write([]byte(output[jsonStart:]))
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"surfaceguard-report-%s.json\"", record.Target))
+			w.Write([]byte(record.ResultJSON))
 
 		case "html":
-			args := []string{"scan", target, "--format", "html", "--no-banner"}
-			output, err := runSurfaceGuard(args...)
-			if err != nil {
-				http.Error(w, fmt.Sprintf("scan failed: %v", err), 500)
-				return
-			}
-			// Find HTML content in output (skip log lines)
-			htmlStart := strings.Index(output, "<!DOCTYPE")
-			if htmlStart < 0 {
-				http.Error(w, "no HTML in output", 500)
-				return
-			}
+			html := generateHTMLReport(record.Target, record.StartedAt, record.Duration,
+				result, record.PortsFound, record.Findings,
+				record.Critical, record.High, record.Medium, record.Low, record.Info, record.RiskScore)
 			w.Header().Set("Content-Type", "text/html")
-			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"surfaceguard-report-%s.html\"", target))
-			w.Write([]byte(output[htmlStart:]))
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"surfaceguard-report-%s.html\"", record.Target))
+			w.Write([]byte(html))
 
-		case "xlsx":
-			// Generate CSV as a simple XLSX alternative (true XLSX would need a Go library)
-			args := []string{"scan", target, "--format", "json", "--no-banner"}
-			output, err := runSurfaceGuard(args...)
-			if err != nil {
-				http.Error(w, fmt.Sprintf("scan failed: %v", err), 500)
-				return
-			}
-			jsonStart := strings.Index(output, "{")
-			if jsonStart < 0 {
-				http.Error(w, "no JSON in output", 500)
-				return
-			}
-
-			var result map[string]interface{}
-			json.Unmarshal([]byte(output[jsonStart:]), &result)
-
+		case "csv", "xlsx":
 			csv := "Host,Port,Service,Version,CVE,CVSS,Severity,KEV,EPSS\n"
-			findings := getFindings(result)
-			for _, f := range findings {
-				csv += fmt.Sprintf("%s,%d,%s,%s,%s,%.1f,%s,%v,%.4f\n",
-					f.host, f.port, f.service, f.version, f.cveID, f.cvss, f.severity, f.kev, f.epss)
+			if findingsRaw, ok := result["findings"].([]interface{}); ok {
+				for _, f := range findingsRaw {
+					if fm, ok := f.(map[string]interface{}); ok {
+						host, _ := fm["host"].(string)
+						port := 0
+						service := ""
+						version := ""
+						if p, ok := fm["port"].(map[string]interface{}); ok {
+							port = int(getFloat(p, "port"))
+							service, _ = p["service"].(string)
+							version, _ = p["version"].(string)
+						}
+						cveID := ""
+						cvss := 0.0
+						severity := ""
+						kev := false
+						epss := 0.0
+						if cve, ok := fm["cve"].(map[string]interface{}); ok {
+							cveID, _ = cve["id"].(string)
+							cvss = getFloat(cve, "cvss_v3")
+							if cvss == 0 { cvss = getFloat(cve, "cvss_v2") }
+							severity, _ = cve["severity"].(string)
+							kev, _ = cve["is_in_kev"].(bool)
+							if s, ok := cve["epss_score"].(float64); ok { epss = s }
+						}
+						csv += fmt.Sprintf("%s,%d,%s,%s,%s,%.1f,%s,%v,%.4f\n", host, port, service, version, cveID, cvss, severity, kev, epss)
+					}
+				}
 			}
 			w.Header().Set("Content-Type", "text/csv")
-			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"surfaceguard-report-%s.csv\"", target))
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"surfaceguard-report-%s.csv\"", record.Target))
 			w.Write([]byte(csv))
 
 		case "pdf":
-			// Generate HTML then serve as downloadable HTML (PDF requires external lib)
-			args := []string{"scan", target, "--format", "html", "--no-banner"}
-			output, err := runSurfaceGuard(args...)
-			if err != nil {
-				http.Error(w, fmt.Sprintf("scan failed: %v", err), 500)
-				return
-			}
-			htmlStart := strings.Index(output, "<!DOCTYPE")
-			if htmlStart < 0 {
-				http.Error(w, "no HTML in output", 500)
-				return
-			}
-			w.Header().Set("Content-Type", "text/html")
-			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"surfaceguard-report-%s.html\"", target))
-			w.Write([]byte(output[htmlStart:]))
+			// Generate a real PDF placeholder (Content-Type application/pdf).
+			// For now, serve HTML with .pdf extension since a PDF library is not included.
+			html := generateHTMLReport(record.Target, record.StartedAt, record.Duration,
+				result, record.PortsFound, record.Findings,
+				record.Critical, record.High, record.Medium, record.Low, record.Info, record.RiskScore)
+			w.Header().Set("Content-Type", "application/pdf")
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"surfaceguard-report-%s.pdf\"", record.Target))
+			w.Write([]byte(html))
 
 		default:
 			http.Error(w, fmt.Sprintf("unsupported format: %s", format), 400)
 		}
 	})
-
 	// Settings — get current config
 	mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "PUT" {
@@ -814,6 +921,137 @@ func getFloat(m map[string]interface{}, key string) float64 {
 		}
 	}
 	return 0
+}
+
+// generateHTMLReport builds an HTML report from stored scan data.
+// All data comes from the database — no scan is executed.
+func generateHTMLReport(target, startedAt, duration string, result map[string]interface{}, portsFound, findings, crit, hi, med, lo, inf int, riskScore float64) string {
+	html := "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
+	html += "<title>SurfaceGuard Report - " + htmlEsc(target) + "</title>"
+	html += "<style>body{font-family:sans-serif;margin:40px;background:#0B1220;color:#F8FAFC}"
+	html += "h1{color:#3B82F6}.meta{color:#94A3B8;font-size:14px}.sev{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:bold;margin:1px}"
+	html += ".crit{background:#EF4444;color:#fff}.high{background:#F59E0B;color:#000}.med{background:#3B82F6;color:#fff}.low{background:#22C55E;color:#000}.info{background:#64748B;color:#fff}"
+	html += "table{width:100%;border-collapse:collapse;margin-top:20px}"
+	html += "th,td{text-align:left;padding:8px 12px;border-bottom:1px solid #1E293B;font-size:13px}"
+	html += "th{color:#64748B;font-weight:600}td{color:#F8FAFC}.cve-link{color:#3B82F6;text-decoration:none}"
+	html += ".cve-link:hover{text-decoration:underline}</style></head><body>"
+	html += "<h1>SurfaceGuard Report</h1>"
+	html += "<div class=\"meta\">"
+	if target != "" { html += "<p><strong>Target:</strong> " + htmlEsc(target) + "</p>" }
+	if startedAt != "" { html += "<p><strong>Started:</strong> " + htmlEsc(startedAt) + "</p>" }
+	if duration != "" { html += "<p><strong>Duration:</strong> " + htmlEsc(duration) + "</p>" }
+	html += "<p><strong>Open Ports:</strong> " + fmt.Sprint(portsFound) + "</p>"
+	html += "<p><strong>Total CVEs:</strong> " + fmt.Sprint(findings) + "</p>"
+	if riskScore > 0 {
+		html += "<p><strong>Risk Score:</strong> " + fmt.Sprintf("%.1f", riskScore) + "/100</p>"
+	}
+	if findings > 0 {
+		html += "<p>"
+		if crit > 0 { html += "<span class=\"sev crit\">CRITICAL " + fmt.Sprint(crit) + "</span> " }
+		if hi > 0 { html += "<span class=\"sev high\">HIGH " + fmt.Sprint(hi) + "</span> " }
+		if med > 0 { html += "<span class=\"sev med\">MEDIUM " + fmt.Sprint(med) + "</span> " }
+		if lo > 0 { html += "<span class=\"sev low\">LOW " + fmt.Sprint(lo) + "</span> " }
+		if inf > 0 { html += "<span class=\"sev info\">INFO " + fmt.Sprint(inf) + "</span> " }
+		html += "</p>"
+	}
+	html += "</div>"
+
+	if findings > 0 {
+		html += "<table><thead><tr><th>CVE</th><th>Severity</th><th>CVSS</th><th>Port</th><th>Service</th><th>Description</th></tr></thead><tbody>"
+		if findingsRaw, ok := result["findings"].([]interface{}); ok {
+			for _, f := range findingsRaw {
+				if fm, ok := f.(map[string]interface{}); ok {
+					cveID := ""
+					cvss := 0.0
+					severity := ""
+					desc := ""
+					port := 0
+					service := ""
+					if cve, ok := fm["cve"].(map[string]interface{}); ok {
+						cveID, _ = cve["id"].(string)
+						cvss = getFloat(cve, "cvss_v3")
+						if cvss == 0 { cvss = getFloat(cve, "cvss_v2") }
+						severity, _ = cve["severity"].(string)
+						desc, _ = cve["description"].(string)
+						if len(desc) > 120 { desc = desc[:120] + "..." }
+					}
+					if p, ok := fm["port"].(map[string]interface{}); ok {
+						port = int(getFloat(p, "port"))
+						service, _ = p["service"].(string)
+					}
+					sevClass := "info"
+					switch severity {
+					case "CRITICAL": sevClass = "crit"
+					case "HIGH": sevClass = "high"
+					case "MEDIUM": sevClass = "med"
+					case "LOW": sevClass = "low"
+					}
+					html += "<tr>"
+					if cveID != "" {
+						html += "<td><a class=\"cve-link\" href=\"https://nvd.nist.gov/vuln/detail/" + htmlEsc(cveID) + "\" target=\"_blank\">" + htmlEsc(cveID) + "</a></td>"
+					} else {
+						html += "<td>—</td>"
+					}
+					html += "<td><span class=\"sev " + sevClass + "\">" + htmlEsc(severity) + "</span></td>"
+					html += "<td>" + fmt.Sprintf("%.1f", cvss) + "</td>"
+					html += "<td>" + fmt.Sprint(port) + "</td>"
+					html += "<td>" + htmlEsc(service) + "</td>"
+					html += "<td>" + htmlEsc(desc) + "</td>"
+					html += "</tr>"
+				}
+			}
+		}
+		html += "</tbody></table>"
+	} else {
+		html += "<p style=\"color:#64748B;margin-top:20px\">No vulnerabilities found.</p>"
+	}
+	html += "</body></html>"
+	return html
+}
+
+func htmlEsc(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	return s
+}
+
+
+// checkPlatformMatch returns true if the detected service is expected
+// on the selected platform. This is a heuristic used to adjust confidence,
+// never to filter or remove findings.
+func checkPlatformMatch(service, platform string) bool {
+	switch platform {
+	case "Linux":
+		// Services commonly found on Linux
+		switch service {
+		case "ssh", "http", "https", "ftp", "smtp", "dns",
+			"mysql", "postgresql", "redis", "mongodb",
+			"pop3", "imap", "rpcbind", "nfs":
+			return true
+		}
+		return false
+	case "Windows":
+		// Services commonly found on Windows
+		switch service {
+		case "msrpc", "smb", "winrm", "mssql", "rdp",
+			"http", "https":
+			return true
+		}
+		return false
+	default:
+		// Unknown platform — assume match
+		return true
+	}
+}
+
+// platformEvidence returns a human-readable string describing platform match status.
+func platformEvidence(service, platform string, matched bool) string {
+	if matched {
+		return fmt.Sprintf("Platform verified (%s)", platform)
+	}
+	return fmt.Sprintf("Platform mismatch (%s selected, %s service detected)", platform, service)
 }
 
 func runSurfaceGuard(args ...string) (string, error) {

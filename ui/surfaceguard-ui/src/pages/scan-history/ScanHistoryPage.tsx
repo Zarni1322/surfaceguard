@@ -1,15 +1,34 @@
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { History, Clock, Trash2 } from "lucide-react";
+import { History, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import axios from "axios";
-import { formatDate, severityColor } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import PageContainer, { colSpan } from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 
+const sevLabels = [
+  { key: "critical", label: "Critical", color: "#EF4444", bg: "rgba(239,68,68,0.12)" },
+  { key: "high",     label: "High",     color: "#F59E0B", bg: "rgba(245,158,11,0.12)" },
+  { key: "medium",   label: "Medium",   color: "#3B82F6", bg: "rgba(59,130,246,0.12)" },
+  { key: "low",      label: "Low",      color: "#22C55E", bg: "rgba(34,197,94,0.12)" },
+  { key: "info",     label: "Info",     color: "#94A3B8", bg: "rgba(148,163,184,0.08)" },
+];
+
+function riskLabel(rec: ScanHistoryRecord): { label: string; color: string } {
+  if (rec.critical > 0) return { label: "Critical", color: "#EF4444" };
+  if (rec.high > 0)     return { label: "High",     color: "#F59E0B" };
+  if (rec.medium > 0)   return { label: "Medium",   color: "#3B82F6" };
+  if (rec.low > 0)      return { label: "Low",      color: "#22C55E" };
+  if (rec.info > 0)     return { label: "Info",     color: "#94A3B8" };
+  return { label: "None", color: "#64748B" };
+}
+
 export default function ScanHistoryPage() {
+  const navigate = useNavigate();
   const { data: history, isLoading, error, refetch } = useQuery({
     queryKey: ["scan-history"],
     queryFn: async () => {
@@ -87,19 +106,35 @@ export default function ScanHistoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {records.map((rec, i) => (
-                  <TableRow key={i} className="border-[#0B1220] hover:bg-[#0B1220]">
-                    <TableCell className="font-mono text-sm text-[#3B82F6]">{rec.target}</TableCell>
+                {records.map((rec, i) => {
+                  const risk = riskLabel(rec);
+                  return (
+                  <TableRow key={i} className="border-[#0B1220] hover:bg-[#0B1220] cursor-pointer" onClick={() => navigate(`/scans/${rec.id}`)}>
+                    <TableCell className="font-mono text-sm text-[#3B82F6] hover:underline" onClick={(e) => { e.stopPropagation(); navigate(`/scans/${rec.id}`); }}>{rec.target}</TableCell>
                     <TableCell className="text-sm text-[#F8FAFC]">{formatDate(rec.started_at)}</TableCell>
                     <TableCell className="text-sm text-[#F8FAFC]">{rec.duration}</TableCell>
                     <TableCell className="text-sm text-[#F8FAFC]">{rec.ports_found}</TableCell>
-                    <TableCell className="text-sm text-[#F8FAFC]">{rec.findings}</TableCell>
+                    <TableCell className="text-sm text-[#F8FAFC]">
+                      <div className="font-medium">{rec.findings} CVEs</div>
+                      <div className="flex flex-wrap gap-1.5 mt-0.5">
+                        {sevLabels.map((s) => (
+                          <span
+                            key={s.key}
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-semibold"
+                            style={{ color: s.color, backgroundColor: s.bg }}
+                          >
+                            <span className="text-[10px]" aria-hidden>{s.label === "Critical" ? "🔴" : s.label === "High" ? "🟠" : s.label === "Medium" ? "🟡" : s.label === "Low" ? "🟢" : "⚪"}</span>
+                            {(rec as any)[s.key] ?? 0}
+                          </span>
+                        ))}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <span
-                        className="font-mono text-sm font-bold"
-                        style={{ color: rec.risk_score > 70 ? "#EF4444" : rec.risk_score > 40 ? "#F59E0B" : "#22C55E" }}
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold"
+                        style={{ color: risk.color, backgroundColor: risk.color === "#EF4444" ? "rgba(239,68,68,0.12)" : risk.color === "#F59E0B" ? "rgba(245,158,11,0.12)" : risk.color === "#3B82F6" ? "rgba(59,130,246,0.12)" : risk.color === "#22C55E" ? "rgba(34,197,94,0.12)" : "rgba(148,163,184,0.08)" }}
                       >
-                        {rec.risk_score.toFixed(0)}
+                        {risk.label}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -115,7 +150,8 @@ export default function ScanHistoryPage() {
                       </Badge>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
@@ -137,6 +173,7 @@ export default function ScanHistoryPage() {
 }
 
 interface ScanHistoryRecord {
+  id: number;
   target: string;
   started_at: string;
   duration: string;
@@ -144,4 +181,9 @@ interface ScanHistoryRecord {
   findings: number;
   risk_score: number;
   status: string;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  info: number;
 }

@@ -1,0 +1,7 @@
+HTTP/1.1 200 OK
+Date: Mon, 15 Jul 2026 10:00:00 GMT
+Server: lighttpd/1.4.76
+Content-Type: text/html
+Content-Length: 300
+
+<html><body><h1>lighttpd works</h1></body></html>

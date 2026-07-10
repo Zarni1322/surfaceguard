@@ -1,0 +1,20 @@
+{
+  "software": "Apache Tomcat 10.1.28",
+  "banner_file": "tomcat_10_1_28.txt",
+  "port": 8080,
+  "service": "http",
+  "vendor": "",
+  "product": "Apache Tomcat",
+  "version": "10.1.28",
+  "cpe": "cpe:2.3:a:apache:tomcat:10.1.28:*:*:*:*:*:*:*",
+  "expected_confidence": 90,
+  "expected_confidence_min": 70,
+  "match_type": "exact",
+  "expected_cves": [],
+  "tags": [
+    "app-server",
+    "tomcat",
+    "java"
+  ],
+  "notes": "Tomcat correctly detected via 'Tomcat|Apache-Coyote' signature. Version extracted from body text."
+}

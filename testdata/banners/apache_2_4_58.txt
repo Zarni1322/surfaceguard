@@ -1,0 +1,8 @@
+HTTP/1.1 200 OK
+Date: Mon, 15 Jul 2026 10:00:00 GMT
+Server: Apache/2.4.58 (Unix)
+Last-Modified: Mon, 15 Jul 2026 09:00:00 GMT
+Content-Type: text/html
+Content-Length: 1234
+
+<html><body><h1>It works!</h1></body></html>

@@ -91,3 +91,5 @@ ui/surfaceguard-ui/dist/
 data/*.bk
 data/*.bak
 downloads/
+api
+scanner

@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/evilhunter/surfaceguard/pkg/models"
+	versionpkg "github.com/evilhunter/surfaceguard/pkg/version"
 
 	// Pure-Go SQLite driver (no CGO).
 	_ "modernc.org/sqlite"
@@ -55,6 +56,7 @@ type sqliteDB struct {
 	easmAssetRepo      *sqliteEASMAssetRepo
 	easmServiceRepo    *sqliteEASMServiceRepo
 	easmFindingRepo    *sqliteEASMFindingRepo
+	scanHistoryRepo    *sqliteScanHistoryRepo
 
 	mu sync.RWMutex
 }
@@ -105,6 +107,7 @@ func NewSQLiteDatabase(ctx context.Context, path string) (Database, error) {
 	sqlite.easmAssetRepo = &sqliteEASMAssetRepo{db: db}
 	sqlite.easmServiceRepo = &sqliteEASMServiceRepo{db: db}
 	sqlite.easmFindingRepo = &sqliteEASMFindingRepo{db: db}
+	sqlite.scanHistoryRepo = &sqliteScanHistoryRepo{db: db}
 
 	// Run migrations.
 	if err := sqlite.migrate(ctx); err != nil {
@@ -174,6 +177,7 @@ func (s *sqliteDB) EASMScan() EASMScanRepository                         { retur
 func (s *sqliteDB) EASMAsset() EASMAssetRepository                       { return s.easmAssetRepo }
 func (s *sqliteDB) EASMService() EASMServiceRepository                   { return s.easmServiceRepo }
 func (s *sqliteDB) EASMFinding() EASMFindingRepository                   { return s.easmFindingRepo }
+func (s *sqliteDB) ScanHistory() ScanHistoryRepository                     { return s.scanHistoryRepo }
 
 // Info returns aggregate database statistics.
 func (s *sqliteDB) Info(ctx context.Context) (*models.DatabaseInfo, error) {
@@ -416,6 +420,46 @@ func (r *sqliteCPERepo) Count(ctx context.Context) (int, error) {
 	return count, err
 }
 
+func (r *sqliteCPERepo) FindNearbyVersions(ctx context.Context, vendor, product, version string, limit int) ([]DBCPE, error) {
+	// Parse the detected version to extract major.minor components.
+	// We search for CPEs matching the same vendor+product where the version
+	// shares the same major.minor prefix (e.g., "2.4" for "2.4.58").
+	// This enables nearby version matching without wildcard fallback.
+	parsed := versionpkg.Parse(version)
+	if parsed.Unknown || parsed.Wildcard {
+		return nil, nil
+	}
+
+	var prefix string
+	if len(parsed.Segments) >= 2 {
+		prefix = fmt.Sprintf("%d.%d", parsed.Segments[0], parsed.Segments[1])
+	} else if len(parsed.Segments) == 1 {
+		prefix = fmt.Sprintf("%d", parsed.Segments[0])
+	} else {
+		return nil, nil
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT c.id, c.vendor_id, c.product_id, c.part, c.version,
+			c.update_, c.edition, c.language, c.target_sw, c.target_hw,
+			c.other, c.cpe_2_3_uri
+		FROM cpe c
+		JOIN vendors v ON v.id = c.vendor_id
+		JOIN products p ON p.id = c.product_id
+		WHERE v.name = ? AND p.name = ?
+			AND c.version != '*'
+			AND (c.version LIKE ? || '.%' OR c.version = ? OR c.version LIKE ? || '.%.%')
+		ORDER BY c.version DESC
+		LIMIT ?
+	`, strings.ToLower(vendor), strings.ToLower(product), prefix, prefix, prefix, limit)
+	if err != nil {
+		return nil, fmt.Errorf("find nearby versions: %w", err)
+	}
+	defer rows.Close()
+
+	return scanCPEs(rows)
+}
+
 func (r *sqliteCPERepo) ExistsByURI(ctx context.Context, uri string) (bool, error) {
 	var count int
 	err := r.db.QueryRowContext(ctx,
@@ -482,11 +526,15 @@ type sqliteCVERepo struct{ db *sql.DB }
 func (r *sqliteCVERepo) Insert(ctx context.Context, cve *DBCVE) (int64, error) {
 	result, err := r.db.ExecContext(ctx, `
 		INSERT INTO cves (cve_id, cpe_id, description, cvss_v2, cvss_v3,
-			severity, published_date, last_modified_date, references_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			severity, published_date, last_modified_date, references_json,
+			version_start_including, version_start_excluding,
+			version_end_including, version_end_excluding)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, cve.CVEID, cve.CPEID, cve.Description, cve.CVSSv2, cve.CVSSv3,
 		cve.Severity, cve.PublishedDate.UTC().Format(time.RFC3339),
-		cve.LastModifiedDate.UTC().Format(time.RFC3339), cve.ReferencesJSON)
+		cve.LastModifiedDate.UTC().Format(time.RFC3339), cve.ReferencesJSON,
+		cve.VersionStartIncluding, cve.VersionStartExcluding,
+		cve.VersionEndIncluding, cve.VersionEndExcluding)
 	if err != nil {
 		return 0, fmt.Errorf("insert cve: %w", err)
 	}
@@ -504,12 +552,17 @@ func (r *sqliteCVERepo) Upsert(ctx context.Context, cve *DBCVE) (int64, bool, er
 		_, err := r.db.ExecContext(ctx, `
 			UPDATE cves SET
 				description = ?, cvss_v2 = ?, cvss_v3 = ?, severity = ?,
-				published_date = ?, last_modified_date = ?, references_json = ?
+				published_date = ?, last_modified_date = ?, references_json = ?,
+				version_start_including = ?, version_start_excluding = ?,
+				version_end_including = ?, version_end_excluding = ?
 			WHERE id = ?
 		`, cve.Description, cve.CVSSv2, cve.CVSSv3, cve.Severity,
 			cve.PublishedDate.UTC().Format(time.RFC3339),
 			cve.LastModifiedDate.UTC().Format(time.RFC3339),
-			cve.ReferencesJSON, existingID)
+			cve.ReferencesJSON,
+			cve.VersionStartIncluding, cve.VersionStartExcluding,
+			cve.VersionEndIncluding, cve.VersionEndExcluding,
+			existingID)
 		if err != nil {
 			return 0, false, fmt.Errorf("update cve: %w", err)
 		}
@@ -519,11 +572,15 @@ func (r *sqliteCVERepo) Upsert(ctx context.Context, cve *DBCVE) (int64, bool, er
 	// Insert new record.
 	result, err := r.db.ExecContext(ctx, `
 		INSERT INTO cves (cve_id, cpe_id, description, cvss_v2, cvss_v3,
-			severity, published_date, last_modified_date, references_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			severity, published_date, last_modified_date, references_json,
+			version_start_including, version_start_excluding,
+			version_end_including, version_end_excluding)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, cve.CVEID, cve.CPEID, cve.Description, cve.CVSSv2, cve.CVSSv3,
 		cve.Severity, cve.PublishedDate.UTC().Format(time.RFC3339),
-		cve.LastModifiedDate.UTC().Format(time.RFC3339), cve.ReferencesJSON)
+		cve.LastModifiedDate.UTC().Format(time.RFC3339), cve.ReferencesJSON,
+		cve.VersionStartIncluding, cve.VersionStartExcluding,
+		cve.VersionEndIncluding, cve.VersionEndExcluding)
 	if err != nil {
 		return 0, false, fmt.Errorf("insert cve: %w", err)
 	}
@@ -624,7 +681,7 @@ func (r *sqliteCVERepo) SearchByProductName(ctx context.Context, product string)
 
 func (r *sqliteCVERepo) Count(ctx context.Context) (int, error) {
 	var count int
-	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM cves").Scan(&count)
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(DISTINCT cve_id) FROM cves").Scan(&count)
 	return count, err
 }
 
@@ -901,6 +958,11 @@ func ToDomainCVE(dbCVE *DBCVE, dbKEV *DBKEV, dbEpss *DBEpss) models.CVE {
 		PublishedDate:    dbCVE.PublishedDate,
 		LastModifiedDate: dbCVE.LastModifiedDate,
 		References:       refs,
+		// Pass through NVD version range fields.
+		VersionStartIncluding: dbCVE.VersionStartIncluding,
+		VersionStartExcluding: dbCVE.VersionStartExcluding,
+		VersionEndIncluding:   dbCVE.VersionEndIncluding,
+		VersionEndExcluding:   dbCVE.VersionEndExcluding,
 	}
 
 	if dbKEV != nil {
@@ -1345,4 +1407,70 @@ func (r *sqliteCredentialValidationRepo) ListByProfile(ctx context.Context, prof
 		items = append(items, v)
 	}
 	return items, rows.Err()
+}
+
+// -- Scan History Repository -------------------------------------------------
+
+type sqliteScanHistoryRepo struct{ db *sql.DB }
+
+func (r *sqliteScanHistoryRepo) Insert(ctx context.Context, s *DBScanHistory) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `
+		INSERT INTO scan_history (target, started_at, duration, ports_found, findings, risk_score,
+			status, critical, high, medium, low, info, result_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, s.Target, s.StartedAt, s.Duration, s.PortsFound, s.Findings, s.RiskScore,
+		s.Status, s.Critical, s.High, s.Medium, s.Low, s.Info, s.ResultJSON)
+	if err != nil {
+		return 0, fmt.Errorf("insert scan history: %w", err)
+	}
+	return res.LastInsertId()
+}
+
+func (r *sqliteScanHistoryRepo) List(ctx context.Context, limit int) ([]DBScanHistory, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, target, started_at, duration, ports_found, findings, risk_score,
+			status, critical, high, medium, low, info, result_json
+		FROM scan_history ORDER BY started_at DESC LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list scan history: %w", err)
+	}
+	defer rows.Close()
+	var items []DBScanHistory
+	for rows.Next() {
+		var s DBScanHistory
+		if err := rows.Scan(&s.ID, &s.Target, &s.StartedAt, &s.Duration,
+			&s.PortsFound, &s.Findings, &s.RiskScore, &s.Status,
+			&s.Critical, &s.High, &s.Medium, &s.Low, &s.Info, &s.ResultJSON); err != nil {
+			return nil, err
+		}
+		items = append(items, s)
+	}
+	return items, rows.Err()
+}
+
+func (r *sqliteScanHistoryRepo) GetByID(ctx context.Context, id int64) (*DBScanHistory, error) {
+	var s DBScanHistory
+	err := r.db.QueryRowContext(ctx, `
+		SELECT id, target, started_at, duration, ports_found, findings, risk_score,
+			status, critical, high, medium, low, info, result_json
+		FROM scan_history WHERE id = ?
+	`, id).Scan(&s.ID, &s.Target, &s.StartedAt, &s.Duration,
+		&s.PortsFound, &s.Findings, &s.RiskScore, &s.Status,
+		&s.Critical, &s.High, &s.Medium, &s.Low, &s.Info, &s.ResultJSON)
+	if err != nil {
+		return nil, fmt.Errorf("get scan history by id: %w", err)
+	}
+	return &s, nil
+}
+
+func (r *sqliteScanHistoryRepo) DeleteAll(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM scan_history")
+	return err
+}
+
+func (r *sqliteScanHistoryRepo) Count(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM scan_history").Scan(&count)
+	return count, err
 }

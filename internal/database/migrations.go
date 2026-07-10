@@ -1,6 +1,6 @@
 package database
 
-const schemaVersion = 6
+const schemaVersion = 8
 
 // schema holds all CREATE TABLE statements. Each migration is a versioned step.
 // Always append new migrations; never modify existing ones.
@@ -11,6 +11,8 @@ var schema = map[int]string{
 	4: schemaV4,
 	5: schemaV5,
 	6: schemaV6,
+	7: schemaV7,
+	8: schemaV8,
 }
 
 const schemaV1 = `
@@ -378,4 +380,42 @@ CREATE TABLE IF NOT EXISTS easm_findings (
 );
 CREATE INDEX IF NOT EXISTS idx_easm_findings_scan ON easm_findings(scan_id);
 CREATE INDEX IF NOT EXISTS idx_easm_findings_cve ON easm_findings(cve_id);
+`
+
+const schemaV7 = `
+-- Add NVD version range columns to the cves table.
+-- These store the affected version boundaries from NVD CPE match criteria.
+-- NULL means no bound for that side (open-ended range).
+ALTER TABLE cves ADD COLUMN version_start_including TEXT;
+ALTER TABLE cves ADD COLUMN version_start_excluding TEXT;
+ALTER TABLE cves ADD COLUMN version_end_including   TEXT;
+ALTER TABLE cves ADD COLUMN version_end_excluding   TEXT;
+
+-- Update schema version.
+UPDATE metadata SET value = '7' WHERE key = 'schema_version';
+`
+
+const schemaV8 = `
+-- Scan history: single source of truth for all completed CVE Discovery scans.
+-- This replaces the in-memory scanHistory slice.
+CREATE TABLE IF NOT EXISTS scan_history (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    target      TEXT NOT NULL,
+    started_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    duration    TEXT NOT NULL DEFAULT '',
+    ports_found INTEGER NOT NULL DEFAULT 0,
+    findings    INTEGER NOT NULL DEFAULT 0,
+    risk_score  REAL NOT NULL DEFAULT 0.0,
+    status      TEXT NOT NULL DEFAULT 'completed',
+    critical    INTEGER NOT NULL DEFAULT 0,
+    high        INTEGER NOT NULL DEFAULT 0,
+    medium      INTEGER NOT NULL DEFAULT 0,
+    low         INTEGER NOT NULL DEFAULT 0,
+    info        INTEGER NOT NULL DEFAULT 0,
+    result_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_scan_history_time ON scan_history(started_at DESC);
+
+-- Update schema version.
+UPDATE metadata SET value = '8' WHERE key = 'schema_version';
 `

@@ -40,7 +40,7 @@ func seedTestData(t *testing.T, db database.Database) {
 		ProductID: productID,
 		Part:      "a",
 		Version:   "2.4.49",
-		CPE23URI:  "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*",
+		CPE23URI:  "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*",
 	})
 	if err != nil {
 		t.Fatalf("cpe: %v", err)
@@ -130,7 +130,7 @@ func TestMatchPortExactCPE(t *testing.T) {
 				Vendor:  "apache",
 				Product: "http_server",
 				Version: "2.4.49",
-				CPE23URI: "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*",
+				CPE23URI: "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*",
 			},
 		},
 	}
@@ -181,33 +181,73 @@ func TestMatchPortNoCPEs(t *testing.T) {
 	}
 }
 
-func TestMatchPortWildcardCPE(t *testing.T) {
+func TestMatchPortNoWildcardFallback(t *testing.T) {
 	m, db := setupTestMatcher(t)
 	defer db.Close()
 	seedTestData(t, db)
 
 	// Match with a version that doesn't have an exact CPE.
+	// Wildcard version matching is disabled (Phase 1 Task 1).
+	// Phase 2: nearby version matching should find 2.4.49 (seeded) for 2.4.50 (detected).
 	port := models.Port{
 		Port:    80,
 		Service: "http",
 		Product: "Apache httpd",
-		Version: "2.4.50", // not in DB, but wildcard should match
+		Version: "2.4.50", // not in DB as exact version, but nearby 2.4.49 is
 		CPEs: []models.CPE{
 			{
 				Part:    "a",
 				Vendor:  "apache",
 				Product: "http_server",
-				Version: "*",
-				CPE23URI: "cpe:2.3:a:apache:http_server:*:*:*:*:*:*:*",
+				Version: "2.4.50",
+				CPE23URI: "cpe:2.3:a:apache:http_server:2.4.50:*:*:*:*:*:*:*",
 			},
 		},
 	}
 
 	findings := m.MatchPort(context.Background(), "example.com", "10.0.0.1", port)
-	// The wildcard CPE won't match because `seedTestData` only creates
-	// the exact version 2.4.49 CPE. Let's try with FindByProduct path.
+	// Phase 2: nearby version matching should find CPE 2.4.49 (same major.minor).
 	if len(findings) == 0 {
-		t.Log("wildcard CPE didn't match (expected with current test data)")
+		t.Fatal("expected findings via nearby version matching, got 0")
+	}
+	// Verify the match came from nearby matching, not wildcard.
+	for _, f := range findings {
+		if f.MatchType != "nearby_version" {
+			t.Errorf("expected match_type 'nearby_version', got %q", f.MatchType)
+		}
+		if f.VersionMatchResult != "db_version_match" {
+			t.Errorf("expected version_match_result 'db_version_match', got %q", f.VersionMatchResult)
+		}
+	}
+}
+
+func TestMatchPortNearbyVersionRejectsWrongFamily(t *testing.T) {
+	m, db := setupTestMatcher(t)
+	defer db.Close()
+	seedTestData(t, db)
+
+	// Detect a version in a different major.minor family than the seeded CPE.
+	// 2.4.49 is seeded; detecting 1.3.0 should NOT match via nearby version.
+	port := models.Port{
+		Port:    80,
+		Service: "http",
+		Product: "Apache httpd",
+		Version: "1.3.0", // different major.minor from 2.4.49
+		CPEs: []models.CPE{
+			{
+				Part:    "a",
+				Vendor:  "apache",
+				Product: "http_server",
+				Version: "1.3.0",
+				CPE23URI: "cpe:2.3:a:apache:http_server:1.3.0:*:*:*:*:*:*:*",
+			},
+		},
+	}
+
+	findings := m.MatchPort(context.Background(), "example.com", "10.0.0.1", port)
+	// Phase 2 nearby matching should NOT find 2.4.49 for 1.3.0 (different major.minor).
+	if len(findings) != 0 {
+		t.Errorf("expected 0 findings (different major.minor family), got %d", len(findings))
 	}
 }
 
@@ -228,7 +268,7 @@ func TestMatchAllPorts(t *testing.T) {
 					Vendor:  "apache",
 					Product: "http_server",
 					Version: "2.4.49",
-					CPE23URI: "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*",
+					CPE23URI: "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*",
 				},
 			},
 		},
@@ -347,15 +387,15 @@ func TestNormalizeCPEProduct(t *testing.T) {
 }
 
 func TestCPEKey(t *testing.T) {
-	key := CPEKey("cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*")
-	if key != "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*" {
+	key := CPEKey("cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*")
+	if key != "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*" {
 		t.Errorf("unexpected key: %s", key)
 	}
 }
 
 func TestCVEAffectedVersions(t *testing.T) {
 	cve := models.CVE{
-		CPE23URI: "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*",
+		CPE23URI: "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*",
 	}
 	version := CVEAffectedVersions(cve)
 	if version != "2.4.49" {
@@ -379,6 +419,126 @@ func TestSeverityRank(t *testing.T) {
 		if got := severityRank(tc.s); got != tc.want {
 			t.Errorf("severityRank(%q) = %d, want %d", tc.s, got, tc.want)
 		}
+	}
+}
+
+// ============================================================================
+// Confidence-gated fallback tests
+// ============================================================================
+
+func TestNewWithOptions(t *testing.T) {
+	opts := Options{MinConfidenceForFallback: 70}
+	m := NewWithOptions(nil, opts)
+	if m == nil {
+		t.Fatal("NewWithOptions returned nil")
+	}
+	if m.opts.MinConfidenceForFallback != 70 {
+		t.Errorf("expected 70, got %d", m.opts.MinConfidenceForFallback)
+	}
+}
+
+func TestMatchPortCarriesConfidence(t *testing.T) {
+	m, db := setupTestMatcher(t)
+	defer db.Close()
+	seedTestData(t, db)
+
+	port := models.Port{
+		Port:       80,
+		Service:    "http",
+		Product:    "Apache httpd",
+		Version:    "2.4.49",
+		Confidence: 95,
+		CPEs: []models.CPE{
+			{
+				Part:     "a",
+				Vendor:   "apache",
+				Product:  "http_server",
+				Version:  "2.4.49",
+				CPE23URI: "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*",
+			},
+		},
+	}
+
+	findings := m.MatchPort(context.Background(), "example.com", "10.0.0.1", port)
+	if len(findings) == 0 {
+		t.Fatal("expected findings")
+	}
+	for _, f := range findings {
+		if f.MatchConfidence != 95 {
+			t.Errorf("expected MatchConfidence=95, got %d", f.MatchConfidence)
+		}
+	}
+}
+
+func TestVendorAgnosticFallbackDisabled(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a matcher (default options — fallback disabled in Phase 1).
+	db, err := database.NewSQLiteDatabase(ctx, t.TempDir()+"/test.db")
+	if err != nil {
+		t.Fatalf("NewSQLiteDatabase failed: %v", err)
+	}
+	defer db.Close()
+	m := New(db)
+
+	// Seed: insert vendor/product/CPE/CVE.
+	vendorID, err := db.Vendor().GetOrCreate(ctx, "apache")
+	if err != nil {
+		t.Fatalf("vendor: %v", err)
+	}
+	productID, err := db.Product().GetOrCreate(ctx, vendorID, "http_server")
+	if err != nil {
+		t.Fatalf("product: %v", err)
+	}
+	cpeID, err := db.CPE().Insert(ctx, &database.DBCPE{
+		VendorID:  vendorID,
+		ProductID: productID,
+		Part:      "a",
+		Version:   "*",
+		CPE23URI: "cpe:2.3:a:apache:http_server:*:*:*:*:*:*:*:*",
+	})
+	if err != nil {
+		t.Fatalf("cpe: %v", err)
+	}
+	_, _, err = db.CVE().Upsert(ctx, &database.DBCVE{
+		CVEID:       "CVE-2024-FALLBACK",
+		CPEID:       cpeID,
+		Description: "Fallback vuln",
+		CVSSv3:      float64Ptr(9.0),
+		Severity:    "CRITICAL",
+		PublishedDate:    time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		LastModifiedDate: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("cve: %v", err)
+	}
+
+	// CPE with vendor="*" and no exact URI match — should return no findings
+	// because Phase 1 disabled vendor-agnostic fallback and wildcard matching.
+	port := models.Port{
+		Port:       80,
+		Service:    "http",
+		Product:    "Apache httpd",
+		Version:    "2.4.99", // not seeded as exact CPE
+		Confidence: 90,
+		CPEs: []models.CPE{
+			{
+				Part:     "a",
+				Vendor:   "*",
+				Product:  "http_server",
+				Version:  "2.4.99",
+				CPE23URI: "cpe:2.3:a:*:http_server:2.4.99:*:*:*:*:*:*:*",
+			},
+		},
+	}
+
+	findings := m.MatchPort(ctx, "example.com", "10.0.0.1", port)
+	// Exact CPE "cpe:2.3:a:*:http_server:2.4.99" is not in DB.
+	// Wildcard fallback is disabled (Phase 1 Task 1).
+	// Vendor-agnostic fallback is disabled (Phase 1 Task 3).
+	// Expected: 0 findings.
+	if len(findings) != 0 {
+		t.Errorf("expected 0 findings (all fallbacks disabled), got %d", len(findings))
 	}
 }
 

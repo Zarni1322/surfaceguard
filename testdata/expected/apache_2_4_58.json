@@ -1,0 +1,18 @@
+{
+  "software": "Apache HTTP Server 2.4.58",
+  "banner_file": "apache_2_4_58.txt",
+  "port": 80,
+  "service": "http",
+  "vendor": "apache",
+  "product": "Apache httpd",
+  "version": "2.4.58",
+  "cpe": "cpe:2.3:a:apache:http_server:2.4.58:*:*:*:*:*:*:*",
+  "expected_confidence": 95,
+  "expected_confidence_min": 80,
+  "match_type": "exact",
+  "expected_cves": [],
+  "tags": [
+    "web-server",
+    "apache"
+  ]
+}

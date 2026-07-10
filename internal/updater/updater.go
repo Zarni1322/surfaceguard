@@ -290,8 +290,12 @@ type cveNode struct {
 	CPEMatch []cpeMatch `json:"cpeMatch"`
 }
 type cpeMatch struct {
-	Vulnerable bool   `json:"vulnerable"`
-	Criteria   string `json:"criteria"`
+	Vulnerable            bool    `json:"vulnerable"`
+	Criteria              string  `json:"criteria"`
+	VersionStartIncluding *string `json:"versionStartIncluding,omitempty"`
+	VersionStartExcluding *string `json:"versionStartExcluding,omitempty"`
+	VersionEndIncluding   *string `json:"versionEndIncluding,omitempty"`
+	VersionEndExcluding   *string `json:"versionEndExcluding,omitempty"`
 }
 
 func (u *Updater) updateCVE(ctx context.Context, lastUpdate string) (int, int, error) {
@@ -390,13 +394,13 @@ func (u *Updater) updateCVE(ctx context.Context, lastUpdate string) (int, int, e
 			}
 			refsJSON, _ := json.Marshal(refs)
 
-			for _, cpeURI := range collectCPE23URIs(cve.Configurations) {
-				dbCPEs, _ := u.db.CPE().FindByCPE23URI(ctx, cpeURI)
+			for _, match := range collectCPEMatches(cve.Configurations) {
+				dbCPEs, _ := u.db.CPE().FindByCPE23URI(ctx, match.Criteria)
 				var cpeID int64
 				if len(dbCPEs) > 0 {
 					cpeID = dbCPEs[0].ID
 				} else {
-					parts := strings.Split(cpeURI, ":")
+					parts := strings.Split(match.Criteria, ":")
 					if len(parts) < 6 {
 						continue
 					}
@@ -404,7 +408,7 @@ func (u *Updater) updateCVE(ctx context.Context, lastUpdate string) (int, int, e
 					pid, _ := u.db.Product().GetOrCreate(ctx, vid, parts[4])
 					id, err := u.db.CPE().Insert(ctx, &database.DBCPE{
 						VendorID: vid, ProductID: pid, Part: parts[2],
-						Version: parts[5], CPE23URI: cpeURI,
+						Version: parts[5], CPE23URI: match.Criteria,
 					})
 					if err != nil {
 						continue
@@ -415,7 +419,11 @@ func (u *Updater) updateCVE(ctx context.Context, lastUpdate string) (int, int, e
 					CVEID: cve.ID, CPEID: cpeID, Description: desc,
 					CVSSv3: cvss, Severity: normalizeSeverity(severity),
 					PublishedDate: pubDate, LastModifiedDate: modDate,
-					ReferencesJSON: string(refsJSON),
+					ReferencesJSON:        string(refsJSON),
+					VersionStartIncluding: match.VersionStartIncluding,
+					VersionStartExcluding: match.VersionStartExcluding,
+					VersionEndIncluding:   match.VersionEndIncluding,
+					VersionEndExcluding:   match.VersionEndExcluding,
 				})
 				if err != nil {
 					continue
@@ -831,6 +839,15 @@ func normalizeSeverity(sev string) string {
 	}
 }
 
+// cpeMatchInfo pairs a CPE URI with its NVD version range metadata.
+type cpeMatchInfo struct {
+	Criteria              string
+	VersionStartIncluding *string
+	VersionStartExcluding *string
+	VersionEndIncluding   *string
+	VersionEndExcluding   *string
+}
+
 func collectCPE23URIs(configs []cveConfiguration) []string {
 	var uris []string
 	seen := map[string]bool{}
@@ -845,6 +862,31 @@ func collectCPE23URIs(configs []cveConfiguration) []string {
 		}
 	}
 	return uris
+}
+
+// collectCPEMatches collects CPE match info (URI + version range) from
+// the NVD API configuration tree. This is used by the updater to store
+// version range constraints alongside each CVE-CPE association.
+func collectCPEMatches(configs []cveConfiguration) []cpeMatchInfo {
+	var matches []cpeMatchInfo
+	seen := map[string]bool{}
+	for _, c := range configs {
+		for _, n := range c.Nodes {
+			for _, m := range n.CPEMatch {
+				if m.Vulnerable && m.Criteria != "" && !seen[m.Criteria] {
+					seen[m.Criteria] = true
+					matches = append(matches, cpeMatchInfo{
+						Criteria:              m.Criteria,
+						VersionStartIncluding: m.VersionStartIncluding,
+						VersionStartExcluding: m.VersionStartExcluding,
+						VersionEndIncluding:   m.VersionEndIncluding,
+						VersionEndExcluding:   m.VersionEndExcluding,
+					})
+				}
+			}
+		}
+	}
+	return matches
 }
 
 // recordHistory inserts a row into update_history table.

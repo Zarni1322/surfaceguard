@@ -1,0 +1,18 @@
+{
+  "software": "lighttpd 1.4.76",
+  "banner_file": "lighttpd_1_4_76.txt",
+  "port": 80,
+  "service": "http",
+  "vendor": "lighttpd",
+  "product": "lighttpd",
+  "version": "1.4.76",
+  "cpe": "cpe:2.3:a:lighttpd:lighttpd:1.4.76:*:*:*:*:*:*:*",
+  "expected_confidence": 95,
+  "expected_confidence_min": 80,
+  "match_type": "exact",
+  "expected_cves": [],
+  "tags": [
+    "web-server",
+    "lighttpd"
+  ]
+}

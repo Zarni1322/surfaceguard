@@ -1,0 +1,19 @@
+{
+  "software": "MySQL 8.0.36",
+  "banner_file": "mysql_8_0_36.txt",
+  "port": 3306,
+  "service": "mysql",
+  "vendor": "oracle",
+  "product": "MySQL",
+  "version": "8.0.36",
+  "cpe": "cpe:2.3:a:oracle:mysql:8.0.36:*:*:*:*:*:*:*",
+  "expected_confidence": 90,
+  "expected_confidence_min": 70,
+  "match_type": "exact",
+  "expected_cves": [],
+  "tags": [
+    "database",
+    "mysql"
+  ],
+  "notes": "MySQL version suffix (-log) now correctly stripped by stripVersionSuffix."
+}

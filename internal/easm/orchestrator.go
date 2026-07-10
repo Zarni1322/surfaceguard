@@ -17,6 +17,7 @@ import (
 	"github.com/evilhunter/surfaceguard/internal/fingerprint"
 	"github.com/evilhunter/surfaceguard/internal/matcher"
 	"github.com/evilhunter/surfaceguard/internal/wordlist"
+	"github.com/evilhunter/surfaceguard/pkg/cpe"
 	"github.com/evilhunter/surfaceguard/pkg/models"
 	"github.com/evilhunter/surfaceguard/pkg/portscan"
 )
@@ -361,13 +362,20 @@ func (o *Orchestrator) runWithID(ctx context.Context, req models.EASMScanRequest
 				Confidence: fp.Confidence,
 			}
 
-			// Resolve CPE URI: try fingerprint first, then fallback.
+			// Resolve CPE URI: try fingerprint first, then service-name lookup.
 			cpeURI := ""
 			if len(fp.CPEs) > 0 {
 				cpeURI = fp.CPEs[0].CPE23URI
 			}
 			if cpeURI == "" {
 				cpeURI = resolveCPE(fp.Service, fp.Product, fp.Version, fp.Port)
+			}
+			if cpeURI == "" {
+				o.logger.Debug("no CPE generated for service — CVE correlation skipped",
+					"host", asset.Hostname, "port", fp.Port,
+					"service", fp.Service, "product", fp.Product,
+					"version", fp.Version, "confidence", fp.Confidence,
+				)
 			}
 			service.CPE23URI = cpeURI
 
@@ -549,130 +557,15 @@ func (o *Orchestrator) failScan(ctx context.Context, scanID int64, errMsg string
 // CPE Resolution for EASM Services
 // ============================================================================
 
-// easmCPEVendorMap maps service/product names to CPE vendors.
-var easmCPEVendorMap = map[string]string{
-	"http":          "apache",
-	"https":         "apache",
-	"nginx":         "nginx",
-	"Apache httpd":  "apache",
-	"Microsoft IIS": "microsoft",
-	"OpenSSH":       "openbsd",
-	"ssh":           "openbsd",
-	"ftp":           "beasts",
-	"vsftpd":        "beasts",
-	"ProFTPD":       "proftpd",
-	"Pure-FTPd":     "pureftpd",
-	"MySQL":         "oracle",
-	"mysql":         "oracle",
-	"MariaDB":       "mariadb",
-	"PostgreSQL":    "postgresql",
-	"postgresql":    "postgresql",
-	"Redis":         "redis",
-	"redis":         "redis",
-	"lighttpd":      "lighttpd",
-	"MongoDB":       "mongodb",
-	"mongodb":       "mongodb",
-	"Docker":        "docker",
-	"docker":        "docker",
-	"Elasticsearch": "elastic",
-	"elasticsearch": "elastic",
-	"RabbitMQ":      "pivotal_software",
-	"Tomcat":        "apache",
-	"Apache Tomcat": "apache",
-	"Jetty":         "eclipse",
-	"Eclipse Jetty": "eclipse",
-	"Node.js":       "nodejs",
-	"Python":        "python_software_foundation",
-	"smtp":          "postfix",
-	"pop3":          "gnu",
-	"imap":          "gnu",
-	"dns":           "isc",
-	"smb":           "samba",
-	"winrm":         "microsoft",
-	"telnet":        "linux",
-	"rpcbind":       "linux",
-	"nfs":           "linux",
-}
-
-var easmCPEProductMap = map[string]string{
-	"http":          "http_server",
-	"https":         "http_server",
-	"nginx":         "nginx",
-	"Apache httpd":  "http_server",
-	"Microsoft IIS": "internet_information_services",
-	"OpenSSH":       "openssh",
-	"ssh":           "openssh",
-	"ftp":           "vsftpd",
-	"vsftpd":        "vsftpd",
-	"ProFTPD":       "proftpd",
-	"Pure-FTPd":     "pure-ftpd",
-	"MySQL":         "mysql",
-	"mysql":         "mysql",
-	"MariaDB":       "mariadb",
-	"PostgreSQL":    "postgresql",
-	"postgresql":    "postgresql",
-	"Redis":         "redis",
-	"redis":         "redis",
-	"lighttpd":      "lighttpd",
-	"MongoDB":       "mongodb",
-	"mongodb":       "mongodb",
-	"Docker":        "docker",
-	"docker":        "docker",
-	"Elasticsearch": "elasticsearch",
-	"elasticsearch": "elasticsearch",
-	"RabbitMQ":      "rabbitmq",
-	"Tomcat":        "tomcat",
-	"Apache Tomcat": "tomcat",
-	"Jetty":         "jetty",
-	"Eclipse Jetty": "jetty",
-	"Node.js":       "node.js",
-	"Python":        "python",
-	"smtp":          "postfix",
-	"pop3":          "pop3",
-	"imap":          "imap",
-	"dns":           "bind",
-	"smb":           "samba",
-	"winrm":         "windows_remote_management",
-	"telnet":        "telnet",
-	"rpcbind":       "rpcbind",
-	"nfs":           "nfs_utils",
-}
-
-// resolveCPE generates a CPE URI for a service. Tries product→service→port.
+// resolveCPE generates a CPE URI for a service using the shared cpe package.
+// This ensures the EASM pipeline produces the same CPE URIs as the Vulnerability
+// Assessment pipeline for the same detected software.
 func resolveCPE(service, product, version string, port int) string {
-	for _, try := range []string{product, service} {
-		if try == "" {
-			continue
-		}
-		vendor := easmCPEVendorMap[try]
-		cp := easmCPEProductMap[try]
-		if vendor != "" && cp != "" {
-			v := version
-			if v == "" {
-				v = "*"
-			}
-			return fmt.Sprintf("cpe:2.3:a:%s:%s:%s:*:*:*:*:*:*:*", vendor, cp, v)
-		}
+	c := cpe.FromServiceOrProduct(service, product, version, port)
+	if c == nil {
+		return ""
 	}
-	portCPE := map[int]struct{ vendor, product string }{
-		22: {"openbsd", "openssh"}, 80: {"apache", "http_server"},
-		443: {"apache", "http_server"}, 8080: {"apache", "http_server"},
-		8443: {"apache", "http_server"}, 21: {"beasts", "vsftpd"},
-		25: {"postfix", "postfix"}, 3306: {"oracle", "mysql"},
-		5432: {"postgresql", "postgresql"}, 6379: {"redis", "redis"},
-		27017: {"mongodb", "mongodb"}, 1433: {"microsoft", "sql_server"},
-		3389: {"microsoft", "windows_remote_desktop"},
-		5900: {"realvnc", "vnc"}, 9200: {"elastic", "elasticsearch"},
-		11211: {"memcached", "memcached"},
-	}
-	if p, ok := portCPE[port]; ok {
-		v := version
-		if v == "" {
-			v = "*"
-		}
-		return fmt.Sprintf("cpe:2.3:a:%s:%s:%s:*:*:*:*:*:*:*", p.vendor, p.product, v)
-	}
-	return ""
+	return c.URI
 }
 
 // ============================================================================

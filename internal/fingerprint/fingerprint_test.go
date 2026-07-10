@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evilhunter/surfaceguard/pkg/cpe"
 	"github.com/evilhunter/surfaceguard/pkg/models"
 )
 
@@ -106,7 +107,7 @@ func TestExtractVersion(t *testing.T) {
 		{"MySQL 8.0.28", "8.0.28"},
 		{"", ""},
 		{"no version here", ""},
-		{"random text 1.2.3", "1.2.3"},
+		{"random text 1.2.3", ""},
 	}
 	for _, tc := range tests {
 		got := extractVersion(tc.banner)
@@ -146,8 +147,8 @@ func TestParseServerHeader(t *testing.T) {
 		wantVersion  string
 	}{
 		{"nginx/1.18.0", "nginx", "1.18.0"},
-		{"Apache/2.4.49 (Unix)", "Apache", "2.4.49"},
-		{"Microsoft-IIS/10.0", "Microsoft-IIS", "10.0"},
+		{"Apache/2.4.49 (Unix)", "Apache httpd", "2.4.49"},
+		{"Microsoft-IIS/10.0", "Microsoft IIS", "10.0"},
 		{"cloudflare", "cloudflare", ""},
 		{"", "", ""},
 	}
@@ -184,9 +185,9 @@ func TestGenerateCPEs(t *testing.T) {
 		version string
 		wantURI string
 	}{
-		{"Apache httpd", "2.4.49", "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*"},
-		{"nginx", "1.18.0", "cpe:2.3:a:nginx:nginx:1.18.0:*:*:*:*:*:*"},
-		{"OpenSSH", "8.9p1", "cpe:2.3:a:openbsd:openssh:8.9p1:*:*:*:*:*:*"},
+		{"Apache httpd", "2.4.49", "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*"},
+		{"nginx", "1.18.0", "cpe:2.3:a:nginx:nginx:1.18.0:*:*:*:*:*:*:*"},
+		{"OpenSSH", "8.9p1", "cpe:2.3:a:openbsd:openssh:8.9p1:*:*:*:*:*:*:*"},
 		{"UnknownProduct", "", ""},
 	}
 	for _, tc := range tests {
@@ -301,10 +302,15 @@ func TestBannerFromPortClosed(t *testing.T) {
 }
 
 func TestVendorMap(t *testing.T) {
-	// Verify all entries in productMap have a corresponding vendorMap entry.
-	for product := range productMap {
-		if _, ok := vendorMap[product]; !ok {
-			t.Errorf("product %q has productMap entry but no vendorMap entry", product)
+	// Verify the shared cpe package has consistent vendor/product mappings.
+	for _, product := range cpe.AllProductKeys() {
+		vendor, hasVendor := cpe.ProductVendor[product]
+		_, hasProduct := cpe.ProductName[product]
+		if hasVendor && !hasProduct {
+			t.Errorf("product %q has vendor %q but no ProductName entry", product, vendor)
+		}
+		if hasProduct && !hasVendor {
+			t.Errorf("product %q has ProductName entry but no vendor", product)
 		}
 	}
 }

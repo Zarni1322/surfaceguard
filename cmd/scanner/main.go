@@ -303,7 +303,9 @@ func runScan(cmd *cobra.Command, cfg *config.Config, logger *slog.Logger, f *sca
 	defer db.Close()
 
 	// Create matcher and scanner.
-	m := matcher.New(db)
+	m := matcher.NewWithOptions(db, matcher.Options{
+		MinConfidenceForFallback: cfg.Scan.MinConfidenceForFallback,
+	})
 	s := scanner.New(cfg, m, logger)
 
 	// Run the scan.
@@ -686,7 +688,9 @@ func runEASM(cmd *cobra.Command, cfg *config.Config, logger *slog.Logger, f *eas
 	defer db.Close()
 
 	// Create matcher and orchestrator.
-	m := matcher.New(db)
+	m := matcher.NewWithOptions(db, matcher.Options{
+		MinConfidenceForFallback: cfg.Scan.MinConfidenceForFallback,
+	})
 	orch := easm.NewOrchestrator(cfg, db, m, logger)
 
 	// Build scan request.

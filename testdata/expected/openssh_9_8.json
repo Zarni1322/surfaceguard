@@ -1,0 +1,18 @@
+{
+  "software": "OpenSSH 9.8",
+  "banner_file": "openssh_9_8.txt",
+  "port": 22,
+  "service": "ssh",
+  "vendor": "openbsd",
+  "product": "OpenSSH",
+  "version": "9.8",
+  "cpe": "cpe:2.3:a:openbsd:openssh:9.8:*:*:*:*:*:*:*",
+  "expected_confidence": 90,
+  "expected_confidence_min": 80,
+  "match_type": "exact",
+  "expected_cves": [],
+  "tags": [
+    "ssh",
+    "openssh"
+  ]
+}

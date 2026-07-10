@@ -1,0 +1,20 @@
+{
+  "software": "Exim 4.98",
+  "banner_file": "exim_4_98.txt",
+  "port": 25,
+  "service": "smtp",
+  "vendor": "",
+  "product": "Exim",
+  "version": "4.98",
+  "cpe": "cpe:2.3:a:exim:exim:4.98:*:*:*:*:*:*:*",
+  "expected_confidence": 90,
+  "expected_confidence_min": 70,
+  "match_type": "exact",
+  "expected_cves": [],
+  "tags": [
+    "mail",
+    "mta",
+    "exim"
+  ],
+  "notes": "Now correctly detected as SMTP Exim. The SMTP-specific signature (ESMTP Exim) matches before generic FTP 220 pattern."
+}

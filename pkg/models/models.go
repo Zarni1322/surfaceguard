@@ -65,26 +65,28 @@ type Port struct {
 
 // CPE represents a Common Platform Enumeration entry (CPE 2.3 format).
 type CPE struct {
-	Part     string `json:"part"` // a=application, o=os, h=hardware
-	Vendor   string `json:"vendor"`
-	Product  string `json:"product"`
-	Version  string `json:"version"`
-	Update   string `json:"update"`
-	Edition  string `json:"edition"`
-	Language string `json:"language"`
-	TargetSW string `json:"target_sw"`
-	TargetHW string `json:"target_hw"`
-	Other    string `json:"other"`
-	CPE23URI string `json:"cpe_2_3_uri"` // full CPE 2.3 URI string
+	Part      string `json:"part"` // a=application, o=os, h=hardware
+	Vendor    string `json:"vendor"`
+	Product   string `json:"product"`
+	Version   string `json:"version"`
+	Update    string `json:"update"`
+	Edition   string `json:"edition"`
+	Language  string `json:"language"`
+	SWEdition string `json:"sw_edition"` // software edition (CPE 2.3 field 8)
+	TargetSW  string `json:"target_sw"`
+	TargetHW  string `json:"target_hw"`
+	Other     string `json:"other"`
+	CPE23URI  string `json:"cpe_2_3_uri"` // full CPE 2.3 URI string
 }
 
 // String returns the CPE 2.3 formatted URI.
 func (c CPE) String() string {
-	return fmt.Sprintf("cpe:2.3:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s",
+	return fmt.Sprintf("cpe:2.3:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s",
 		c.Part, c.Vendor, c.Product, wildcard(c.Version),
 		wildcard(c.Update), wildcard(c.Edition),
-		wildcard(c.Language), wildcard(c.TargetSW),
-		wildcard(c.TargetHW), wildcard(c.Other))
+		wildcard(c.Language), wildcard(c.SWEdition),
+		wildcard(c.TargetSW), wildcard(c.TargetHW),
+		wildcard(c.Other))
 }
 
 func wildcard(s string) string {
@@ -109,6 +111,13 @@ type CVE struct {
 	KEVDueDate       *time.Time `json:"kev_due_date,omitempty"`
 	EPSSScore        *float64   `json:"epss_score,omitempty"`
 	EPSSPercentile   *float64   `json:"epss_percentile,omitempty"`
+	// Version range fields (NVD CPE match criteria).
+	// These define the exact software versions affected by this CVE.
+	// All four fields are optional; nil means no bound.
+	VersionStartIncluding *string `json:"version_start_including,omitempty"`
+	VersionStartExcluding *string `json:"version_start_excluding,omitempty"`
+	VersionEndIncluding   *string `json:"version_end_including,omitempty"`
+	VersionEndExcluding   *string `json:"version_end_excluding,omitempty"`
 }
 
 // CVSSSeverity returns a human-readable severity label from a CVSSv3 score.
@@ -134,6 +143,38 @@ type Finding struct {
 	Port       Port   `json:"port"`
 	CVE        CVE    `json:"cve"`
 	MatchedCPE CPE    `json:"matched_cpe"`
+
+	// MatchConfidence captures the fingerprint/service-detection confidence (0-100)
+	// at the time this finding was produced. Findings from lower-confidence
+	// sources (e.g., port-based guesses with no banner) are flagged accordingly.
+	MatchConfidence int `json:"match_confidence,omitempty"`
+
+	// MatchType describes how this CVE was matched: "cpe_exact", "cpe_wildcard_version",
+	// "vendor_product", "vendor_agnostic_fallback", or empty for CPE-based direct match.
+	MatchType string `json:"match_type,omitempty"`
+
+	// MatchEvidence is a human-readable explanation of why this finding was produced,
+	// including the fallback strategy used and the original detected values.
+	MatchEvidence string `json:"match_evidence,omitempty"`
+
+	// VersionValidation describes the result of NVD version range validation.
+	// One of: "affected", "not_affected", "unknown" (empty means not checked).
+	VersionValidation string `json:"version_validation,omitempty"`
+
+	// DetectedVersion is the version string that was extracted from the banner
+	// and compared against the affected version range.
+	DetectedVersion string `json:"detected_version,omitempty"`
+
+	// AffectedVersionRange is a human-readable representation of the NVD
+	// version range (e.g. ">=2.4.0, <2.4.57").
+	AffectedVersionRange string `json:"affected_version_range,omitempty"`
+
+	// VersionMatchResult describes how the detected version relates to the
+	// CPE/CVE version information. This is set by the Phase 2 version
+	// intelligence engine and is an internal classification, not user-visible.
+	// One of: "exact_version", "version_range_match", "nearby_version",
+	// "db_version_match", "version_mismatch", "unknown_version".
+	VersionMatchResult string `json:"version_match_result,omitempty"`
 }
 
 // ScanResult holds the complete output of a scan session.

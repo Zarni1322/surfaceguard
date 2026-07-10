@@ -1,0 +1,20 @@
+{
+  "software": "Redis 7.2.6",
+  "banner_file": "redis_7_2_6.txt",
+  "port": 6379,
+  "service": "redis",
+  "vendor": "",
+  "product": "Redis",
+  "version": "",
+  "cpe": "cpe:2.3:a:redis:redis:*:*:*:*:*:*:*:*",
+  "expected_confidence": 90,
+  "expected_confidence_min": 70,
+  "match_type": "banner_match",
+  "expected_cves": [],
+  "tags": [
+    "database",
+    "cache",
+    "redis"
+  ],
+  "notes": "Redis correctly detected via '-ERR' signature. Product detected as Redis from banner pattern. No version extracted (no version string in this error response)."
+}

@@ -1,0 +1,19 @@
+{
+  "software": "MariaDB 10.11.8",
+  "banner_file": "mariadb_10_11_8.txt",
+  "port": 3306,
+  "service": "mysql",
+  "vendor": "mariadb",
+  "product": "MariaDB",
+  "version": "10.11.8",
+  "cpe": "cpe:2.3:a:mariadb:mariadb:10.11.8:*:*:*:*:*:*:*",
+  "expected_confidence": 90,
+  "expected_confidence_min": 70,
+  "match_type": "exact",
+  "expected_cves": [],
+  "tags": [
+    "database",
+    "mariadb"
+  ],
+  "notes": "Version suffix (-MariaDB) now correctly stripped by stripVersionSuffix."
+}

@@ -1,0 +1,18 @@
+{
+  "software": "Microsoft IIS 10.0",
+  "banner_file": "iis_10_0.txt",
+  "port": 443,
+  "service": "http",
+  "vendor": "microsoft",
+  "product": "Microsoft IIS",
+  "version": "10.0",
+  "cpe": "cpe:2.3:a:microsoft:internet_information_services:10.0:*:*:*:*:*:*:*",
+  "expected_confidence": 95,
+  "expected_confidence_min": 80,
+  "match_type": "exact",
+  "expected_cves": [],
+  "tags": [
+    "web-server",
+    "iis"
+  ]
+}

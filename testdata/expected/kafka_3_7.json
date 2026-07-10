@@ -1,0 +1,20 @@
+{
+  "software": "Apache Kafka 3.7",
+  "banner_file": "kafka_3_7.txt",
+  "port": 9092,
+  "service": "kafka",
+  "vendor": "",
+  "product": "Kafka",
+  "version": "",
+  "cpe": "cpe:2.3:a:apache:kafka:*:*:*:*:*:*:*:*",
+  "expected_confidence": 50,
+  "expected_confidence_min": 40,
+  "match_type": "port_based_detection",
+  "expected_cves": [],
+  "tags": [
+    "infrastructure",
+    "kafka",
+    "messaging"
+  ],
+  "notes": "Kafka detected on port 9092 via serviceByPort. Banner is binary protocol metadata, no textual signature matches. Confidence 50 from port-based guess."
+}

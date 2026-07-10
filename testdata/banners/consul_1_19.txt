@@ -1,0 +1,6 @@
+HTTP/1.1 200 OK
+Date: Mon, 15 Jul 2026 10:00:00 GMT
+Content-Type: application/json
+Content-Length: 100
+
+{"serf_lan": {"member_count": 3}}

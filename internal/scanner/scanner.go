@@ -20,6 +20,8 @@ import (
 	"github.com/evilhunter/surfaceguard/internal/fingerprint"
 	"github.com/evilhunter/surfaceguard/internal/matcher"
 	"github.com/evilhunter/surfaceguard/internal/report"
+	"github.com/evilhunter/surfaceguard/internal/scoring"
+	"github.com/evilhunter/surfaceguard/internal/validation"
 	"github.com/evilhunter/surfaceguard/pkg/models"
 	"github.com/evilhunter/surfaceguard/pkg/portscan"
 )
@@ -129,8 +131,16 @@ func (s *Scanner) Scan(ctx context.Context, target *models.Target, opts models.S
 		result.Findings = matcher.FilterByCVSS(result.Findings, opts.CVSSThreshold)
 	}
 
-	// Calculate risk score.
-	result.RiskScore = models.CalculateRiskScore(result.Findings)
+	// Phase 4: Finding validation and risk scoring.
+	validated, suppressed := validation.ValidateAll(result.Findings, validation.DefaultOptions())
+	result.Findings = validated
+	if len(suppressed) > 0 {
+	s.logger.Debug("validation suppressed findings",
+		"total_suppressed", len(suppressed),
+		"remaining", len(validated),
+	)
+	}
+	result.RiskScore = scoring.CalculateRiskScore(result.Findings)
 	result.Duration = time.Since(startTime)
 
 	s.logger.Info("scan complete",

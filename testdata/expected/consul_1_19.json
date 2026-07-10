@@ -1,0 +1,20 @@
+{
+  "software": "HashiCorp Consul 1.19",
+  "banner_file": "consul_1_19.txt",
+  "port": 8500,
+  "service": "http",
+  "vendor": "",
+  "product": "",
+  "version": "",
+  "cpe": "cpe:2.3:a:apache:http_server:*:*:*:*:*:*:*:*",
+  "expected_confidence": 50,
+  "expected_confidence_min": 40,
+  "match_type": "unmapped_product",
+  "expected_cves": [],
+  "tags": [
+    "infrastructure",
+    "consul",
+    "service-mesh"
+  ],
+  "notes": "Consul banner does not contain a recognizable Consul signature. Service detected as http from HTTP banner. No version extracted (no product-specific version pattern matched). CPE generated from service name 'http' lookup."
+}

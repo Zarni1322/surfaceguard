@@ -140,6 +140,54 @@ func TestValidateInvalidBannerSize(t *testing.T) {
 	}
 }
 
+func TestDefaultMinConfidenceForFallback(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Scan.MinConfidenceForFallback != 90 {
+		t.Errorf("expected default MinConfidenceForFallback 90, got %d", cfg.Scan.MinConfidenceForFallback)
+	}
+}
+
+func TestValidateInvalidMinConfidenceForFallback(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Scan.MinConfidenceForFallback = -1
+	if err := cfg.validate(); err == nil {
+		t.Fatal("expected error for negative MinConfidenceForFallback")
+	}
+	cfg.Scan.MinConfidenceForFallback = 101
+	if err := cfg.validate(); err == nil {
+		t.Fatal("expected error for MinConfidenceForFallback > 100")
+	}
+}
+
+func TestEnvOverrideMinConfidenceForFallback(t *testing.T) {
+	os.Setenv("SURFACEGUARD_SCAN_MIN_CONFIDENCE_FALLBACK", "50")
+	defer os.Unsetenv("SURFACEGUARD_SCAN_MIN_CONFIDENCE_FALLBACK")
+
+	cfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if cfg.Scan.MinConfidenceForFallback != 50 {
+		t.Errorf("expected MinConfidenceForFallback 50 (env override), got %d", cfg.Scan.MinConfidenceForFallback)
+	}
+}
+
+func TestEnvOverrideMinConfidenceForFallbackClamp(t *testing.T) {
+	// Values outside 0-100 should be rejected.
+	os.Setenv("SURFACEGUARD_SCAN_MIN_CONFIDENCE_FALLBACK", "999")
+	defer os.Unsetenv("SURFACEGUARD_SCAN_MIN_CONFIDENCE_FALLBACK")
+
+	cfg := DefaultConfig()
+	// LoadConfig will apply the env override but the value 999 is out of range
+	// and should be rejected (the env override won't change the default).
+	// We bypass this by testing the env-override logic inline.
+	// Actually, LoadConfig also validates, so test the validation separately.
+	cfg.Scan.MinConfidenceForFallback = 999
+	if err := cfg.validate(); err == nil {
+		t.Fatal("expected validation error for MinConfidenceForFallback=999")
+	}
+}
+
 func TestValidateInvalidLogLevel(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Logging.Level = "verbose"

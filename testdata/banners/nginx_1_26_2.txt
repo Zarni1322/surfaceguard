@@ -1,0 +1,12 @@
+HTTP/1.1 200 OK
+Date: Mon, 15 Jul 2026 10:00:00 GMT
+Server: nginx/1.26.2
+Content-Type: text/html
+Content-Length: 615
+
+<html>
+<head><title>Welcome to nginx!</title></head>
+<body>
+<h1>Welcome to nginx!</h1>
+</body>
+</html>

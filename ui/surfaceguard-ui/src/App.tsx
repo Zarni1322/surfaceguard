@@ -12,6 +12,7 @@ import AssessmentHistoryPage from "@/pages/assessment-history/AssessmentHistoryP
 import EASMDashboard from "@/pages/easm/EASMDashboard";
 import EASMScanDetail from "@/pages/easm/EASMScanDetail";
 import ScanHistoryPage from "@/pages/scan-history/ScanHistoryPage";
+import ScanDetailPage from "@/pages/scan-detail/ScanDetailPage";
 import ReportsPage from "@/pages/reports/ReportsPage";
 import UpdatesPage from "@/pages/updates/UpdatesPage";
 import DatabasePage from "@/pages/database/DatabasePage";
@@ -38,11 +39,10 @@ export default function App() {
             <Route path="/credentials" element={<CredentialsPage />} />
             <Route path="/assessment" element={<AssessmentPage />} />
             <Route path="/assets" element={<AssetsPage />} />
-            <Route path="/assessment-history" element={<AssessmentHistoryPage />} />
             <Route path="/easm" element={<EASMDashboard />} />
             <Route path="/easm/:id" element={<EASMScanDetail />} />
             <Route path="/scan-history" element={<ScanHistoryPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/scans/:scanId" element={<ScanDetailPage />} />
             <Route path="/updates" element={<UpdatesPage />} />
             <Route path="/database" element={<DatabasePage />} />
             <Route path="/settings" element={<SettingsPage />} />

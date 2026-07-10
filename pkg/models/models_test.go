@@ -47,7 +47,7 @@ func TestCPEString(t *testing.T) {
 		Product: "http_server",
 		Version: "2.4.49",
 	}
-	expected := "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*"
+	expected := "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*"
 	if s := cpe.String(); s != expected {
 		t.Errorf("expected %q, got %q", expected, s)
 	}

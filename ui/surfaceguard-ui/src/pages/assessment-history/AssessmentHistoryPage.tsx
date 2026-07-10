@@ -146,6 +146,9 @@ export default function AssessmentHistoryPage() {
                         </div>
                       </div>
                     )}
+                    {!r.asset && (!r.findings || r.findings.length === 0) && (!r.cves || r.cves.length === 0) && (!r.packages || r.packages.length === 0) && (
+                      <p className="text-sm text-[#64748B] py-2">No detailed data saved for this assessment.</p>
+                    )}
                   </div>
                 )}
               </CardContent>

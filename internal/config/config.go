@@ -63,6 +63,10 @@ type ScanConfig struct {
 	BannerSize  int           `yaml:"banner_size"`
 	Fingerprint bool          `yaml:"fingerprint"`
 	RateLimit   int           `yaml:"rate_limit"` // max packets per second (0=unlimited)
+
+	// MinConfidenceForFallback is retained for API compatibility.
+	// Phase 1 removed all fallback paths; this field is currently unused.
+	MinConfidenceForFallback int `yaml:"min_confidence_fallback"`
 }
 
 // DatabaseConfig configures the local SQLite database.
@@ -118,6 +122,7 @@ func DefaultConfig() *Config {
 			BannerSize:  2048,
 			Fingerprint: true,
 			RateLimit:   0,
+			MinConfidenceForFallback: 90,
 		},
 		Database: DatabaseConfig{
 			Path:            "data/cve.db",
@@ -204,6 +209,11 @@ func (c *Config) applyEnvOverrides() {
 			c.Scan.Workers = i
 		}
 	}
+	if v := os.Getenv(EnvPrefix + "SCAN_MIN_CONFIDENCE_FALLBACK"); v != "" {
+		if i, err := strconv.Atoi(v); err == nil && i >= 0 && i <= 100 {
+			c.Scan.MinConfidenceForFallback = i
+		}
+	}
 	if v := os.Getenv(EnvPrefix + "SCAN_TIMEOUT"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			c.Scan.Timeout = d
@@ -264,6 +274,9 @@ func (c *Config) validate() error {
 	}
 	if c.Scan.BannerSize <= 0 {
 		return fmt.Errorf("scan.banner_size must be positive (got %d)", c.Scan.BannerSize)
+	}
+	if c.Scan.MinConfidenceForFallback < 0 || c.Scan.MinConfidenceForFallback > 100 {
+		return fmt.Errorf("scan.min_confidence_fallback must be 0-100 (got %d)", c.Scan.MinConfidenceForFallback)
 	}
 	if c.Database.Path == "" {
 		return fmt.Errorf("database.path must not be empty")

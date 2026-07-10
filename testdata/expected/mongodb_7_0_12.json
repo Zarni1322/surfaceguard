@@ -1,0 +1,18 @@
+{
+  "software": "MongoDB 7.0.12",
+  "banner_file": "mongodb_7_0_12.txt",
+  "port": 27017,
+  "service": "mongodb",
+  "vendor": "mongodb",
+  "product": "MongoDB",
+  "version": "7.0.12",
+  "cpe": "cpe:2.3:a:mongodb:mongodb:7.0.12:*:*:*:*:*:*:*",
+  "expected_confidence": 90,
+  "expected_confidence_min": 70,
+  "match_type": "exact",
+  "expected_cves": [],
+  "tags": [
+    "database",
+    "mongodb"
+  ]
+}

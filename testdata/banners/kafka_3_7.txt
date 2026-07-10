@@ -1,0 +1,1 @@
+{"version": 1, "host": "broker1", "port": 9092}

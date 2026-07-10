@@ -1,0 +1,18 @@
+{
+  "software": "nginx 1.26.2",
+  "banner_file": "nginx_1_26_2.txt",
+  "port": 80,
+  "service": "http",
+  "vendor": "nginx",
+  "product": "nginx",
+  "version": "1.26.2",
+  "cpe": "cpe:2.3:a:nginx:nginx:1.26.2:*:*:*:*:*:*:*",
+  "expected_confidence": 95,
+  "expected_confidence_min": 80,
+  "match_type": "exact",
+  "expected_cves": [],
+  "tags": [
+    "web-server",
+    "nginx"
+  ]
+}

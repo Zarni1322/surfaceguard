@@ -1,0 +1,18 @@
+{
+  "software": "PostgreSQL 16.4",
+  "banner_file": "postgresql_16_4.txt",
+  "port": 5432,
+  "service": "postgresql",
+  "vendor": "postgresql",
+  "product": "PostgreSQL",
+  "version": "16.4",
+  "cpe": "cpe:2.3:a:postgresql:postgresql:16.4:*:*:*:*:*:*:*",
+  "expected_confidence": 90,
+  "expected_confidence_min": 70,
+  "match_type": "exact",
+  "expected_cves": [],
+  "tags": [
+    "database",
+    "postgresql"
+  ]
+}

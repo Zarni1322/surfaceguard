@@ -42,6 +42,10 @@ type CPERepository interface {
 	FindByProduct(ctx context.Context, vendor, product, version string) ([]DBCPE, error)
 	// FindByCPE23URI finds CPEs by their full CPE 2.3 URI.
 	FindByCPE23URI(ctx context.Context, uri string) ([]DBCPE, error)
+	// FindNearbyVersions finds CPEs for the same vendor+product within the same
+	// major.minor version range (e.g., 2.4.x for a 2.4.58 detected version).
+	// This enables nearby version matching without wildcard fallback.
+	FindNearbyVersions(ctx context.Context, vendor, product, version string, limit int) ([]DBCPE, error)
 	// Count returns the total number of CPE records.
 	Count(ctx context.Context) (int, error)
 	// ExistsByURI checks if a CPE with the given URI already exists.
@@ -191,6 +195,21 @@ type InstalledSoftwareRepository interface {
 	DeleteByAsset(ctx context.Context, assetID int64) error
 }
 
+// ScanHistoryRepository stores completed CVE Discovery scan records.
+// This is the single source of truth for all scan history data.
+type ScanHistoryRepository interface {
+	// Insert saves a completed scan record atomically.
+	Insert(ctx context.Context, r *DBScanHistory) (int64, error)
+	// List returns scan records ordered by started_at DESC.
+	List(ctx context.Context, limit int) ([]DBScanHistory, error)
+	// GetByID returns a single scan record by its ID.
+	GetByID(ctx context.Context, id int64) (*DBScanHistory, error)
+	// DeleteAll removes all scan history records.
+	DeleteAll(ctx context.Context) error
+	// Count returns the total number of scan records.
+	Count(ctx context.Context) (int, error)
+}
+
 // SecurityFindingRepository stores security configuration findings.
 type SecurityFindingRepository interface {
 	// BulkInsert inserts findings for an assessment.
@@ -310,6 +329,8 @@ type Database interface {
 	EASMService() EASMServiceRepository
 	// EASMFinding returns the EASM finding repository.
 	EASMFinding() EASMFindingRepository
+	// ScanHistory returns the scan history repository.
+	ScanHistory() ScanHistoryRepository
 
 	// Info returns a DatabaseInfo struct with aggregate stats.
 	Info(ctx context.Context) (*models.DatabaseInfo, error)

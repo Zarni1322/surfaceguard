@@ -541,14 +541,52 @@ func (e *Engine) ListHistory(ctx context.Context, limit int) ([]models.Assessmen
 		}
 		// Parse result JSON if available.
 		if r.ResultJSON != "{}" && r.ResultJSON != "" {
-			var full models.AssessmentResult
-			if err := json.Unmarshal([]byte(r.ResultJSON), &full); err == nil {
-				results[i] = full
-				results[i].ID = r.ID
+			// CVE Discovery results are stored as ScanResult JSON, not
+			// AssessmentResult JSON. Handle them separately.
+			if string(r.Protocol) == "cve-discovery" {
+				e.populateCVEDiscoveryResult(&results[i], r)
+			} else {
+				var full models.AssessmentResult
+				if err := json.Unmarshal([]byte(r.ResultJSON), &full); err == nil {
+					results[i] = full
+					results[i].ID = r.ID
+				}
 			}
 		}
 	}
 	return results, nil
+}
+
+// populateCVEDiscoveryResult populates an AssessmentResult from a CVE Discovery
+// ScanResult JSON. This is a separate path because CVE Discovery produces
+// a different data model than authenticated assessments.
+func (e *Engine) populateCVEDiscoveryResult(result *models.AssessmentResult, dbResult database.DBAssessmentResult) {
+	type scanResult struct {
+		Target    *struct {
+			Raw string `json:"raw"`
+		} `json:"target,omitempty"`
+		Findings []struct {
+			CVE models.CVE `json:"cve"`
+		} `json:"findings,omitempty"`
+		RiskScore float64 `json:"risk_score"`
+	}
+	var sr scanResult
+	if err := json.Unmarshal([]byte(dbResult.ResultJSON), &sr); err != nil {
+		return
+	}
+	if sr.Target != nil && sr.Target.Raw != "" {
+		result.Target = sr.Target.Raw
+	}
+	result.RiskScore = sr.RiskScore
+	if len(sr.Findings) > 0 {
+		cves := make([]models.CVE, 0, len(sr.Findings))
+		for _, f := range sr.Findings {
+			if f.CVE.ID != "" {
+				cves = append(cves, f.CVE)
+			}
+		}
+		result.CVEs = cves
+	}
 }
 
 // ============================================================================
@@ -639,7 +677,22 @@ func (e *Engine) saveValidation(ctx context.Context, profileID int64, result *mo
 }
 
 func (e *Engine) saveAssessmentToInventory(ctx context.Context, result *models.AssessmentResult) {
+	// Save assessment result to history. This always runs regardless of Asset
+	// so the Assessment History page can display findings, CVEs, and metadata.
+	jsonBytes, _ := json.Marshal(result)
+	e.db.AssessmentResult().Create(ctx, &database.DBAssessmentResult{
+		Target:     result.Target,
+		ProfileID:  result.ProfileID,
+		Protocol:   string(result.Protocol),
+		StartedAt:  result.StartedAt.Format(time.RFC3339),
+		Duration:   result.Duration,
+		ResultJSON: string(jsonBytes),
+		Status:     result.Status,
+	})
+
+	// Save asset inventory and packages/software (if available).
 	if result.Asset == nil {
+		// No asset data — the history entry still has findings and CVEs.
 		return
 	}
 
@@ -665,18 +718,6 @@ func (e *Engine) saveAssessmentToInventory(ctx context.Context, result *models.A
 			e.logger.Warn("failed to sync software", "error", err)
 		}
 	}
-
-	// Save assessment result.
-	jsonBytes, _ := json.Marshal(result)
-	e.db.AssessmentResult().Create(ctx, &database.DBAssessmentResult{
-		Target:     result.Target,
-		ProfileID:  result.ProfileID,
-		Protocol:   string(result.Protocol),
-		StartedAt:  result.StartedAt.Format(time.RFC3339),
-		Duration:   result.Duration,
-		ResultJSON: string(jsonBytes),
-		Status:     result.Status,
-	})
 }
 
 // UpdateRiskScore updates an asset's risk score.

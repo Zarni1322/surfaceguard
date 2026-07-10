@@ -1,0 +1,20 @@
+{
+  "software": "Postfix 3.9.0",
+  "banner_file": "postfix_3_9.txt",
+  "port": 25,
+  "service": "smtp",
+  "vendor": "",
+  "product": "Postfix",
+  "version": "3.9.0",
+  "cpe": "cpe:2.3:a:postfix:postfix:3.9.0:*:*:*:*:*:*:*",
+  "expected_confidence": 90,
+  "expected_confidence_min": 70,
+  "match_type": "exact",
+  "expected_cves": [],
+  "tags": [
+    "mail",
+    "mta",
+    "postfix"
+  ],
+  "notes": "Now correctly detected as SMTP Postfix. The SMTP-specific signature (ESMTP Postfix) matches before generic FTP 220 pattern."
+}

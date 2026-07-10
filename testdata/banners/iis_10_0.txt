@@ -1,0 +1,7 @@
+HTTP/1.1 200 OK
+Date: Mon, 15 Jul 2026 10:00:00 GMT
+Server: Microsoft-IIS/10.0
+Content-Type: text/html
+Content-Length: 700
+
+<html><body><h1>Default Web Site</h1></body></html>
