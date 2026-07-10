@@ -332,6 +332,21 @@ func main() {
 		}
 		defer db.Close()
 		if r.Method == "DELETE" {
+			// DELETE /api/scan-history?id=X — delete single record
+			if idStr := r.URL.Query().Get("id"); idStr != "" {
+				id, err := strconv.ParseInt(idStr, 10, 64)
+				if err != nil {
+					http.Error(w, "invalid id", 400)
+					return
+				}
+				if err := db.ScanHistory().Delete(ctx, id); err != nil {
+					http.Error(w, err.Error(), 404)
+					return
+				}
+				writeJSON(w, map[string]string{"status": "deleted"})
+				return
+			}
+			// DELETE /api/scan-history — delete all
 			db.ScanHistory().DeleteAll(ctx)
 			writeJSON(w, map[string]string{"status": "ok"})
 			return
@@ -648,6 +663,11 @@ func main() {
 	mux.HandleFunc("/api/wordlists/delete", handleWordlistDelete)
 	mux.HandleFunc("/api/wordlists/check-update", handleWordlistCheckUpdate)
 
+
+	// Serve frontend static files (built from ui/surfaceguard-ui).
+	// The proxy-based Vite dev server is no longer required.
+	fs := http.FileServer(http.Dir("./ui/surfaceguard-ui/dist"))
+	mux.Handle("/", fs)
 	addr := ":8080"
 	fmt.Printf("SurfaceGuard API server on %s\n", addr)
 	log.Fatal(http.ListenAndServe(addr, handler))
