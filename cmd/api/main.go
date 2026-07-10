@@ -405,7 +405,7 @@ func main() {
 		flusher.Flush()
 
 		// Run update synchronously, capture real-time output
-		cmd := exec.Command("./surfaceguard", "update")
+		cmd := exec.Command("./surfaceguard-cli", "update")
 		stdout, _ := cmd.StdoutPipe()
 		cmd.Stderr = cmd.Stdout
 		cmd.Start()
@@ -1086,7 +1086,7 @@ func platformEvidence(service, platform string, matched bool) string {
 }
 
 func runSurfaceGuard(args ...string) (string, error) {
-	cmd := exec.Command("./surfaceguard", args...)
+	cmd := exec.Command("./surfaceguard-cli", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("%s: %s", err, string(output))
