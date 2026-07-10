@@ -666,8 +666,19 @@ func main() {
 
 	// Serve frontend static files (built from ui/surfaceguard-ui).
 	// The proxy-based Vite dev server is no longer required.
-	fs := http.FileServer(http.Dir("./ui/surfaceguard-ui/dist"))
-	mux.Handle("/", fs)
+	// SPA fallback: serve index.html for all frontend routes.
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			http.ServeFile(w, r, "./ui/surfaceguard-ui/dist/index.html")
+			return
+		}
+		filePath := "./ui/surfaceguard-ui/dist" + r.URL.Path
+		if _, err := os.Stat(filePath); err == nil {
+			http.ServeFile(w, r, filePath)
+			return
+		}
+		http.ServeFile(w, r, "./ui/surfaceguard-ui/dist/index.html")
+	})
 	addr := ":8080"
 	fmt.Printf("SurfaceGuard API server on %s\n", addr)
 	log.Fatal(http.ListenAndServe(addr, handler))
