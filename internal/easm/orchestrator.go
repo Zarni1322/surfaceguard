@@ -348,6 +348,7 @@ func (o *Orchestrator) runWithID(ctx context.Context, req models.EASMScanRequest
 		}
 
 		for _, p := range openPorts {
+			p.TargetIP = asset.IPAddress
 			// Service fingerprinting (reuse existing engine).
 			fp := o.fingerprinter.Fingerprint(p)
 

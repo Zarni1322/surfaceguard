@@ -84,6 +84,7 @@ func (s *Scanner) Scan(ctx context.Context, target *models.Target, opts models.S
 
 	// Step 2: Fingerprint each open port.
 	for i, port := range openPorts {
+			openPorts[i].TargetIP = scanIP
 		// If port has no banner yet, grab one.
 		if port.Banner == "" {
 			banner := fingerprint.BannerFromPort(scanIP, port.Port, s.cfg.Scan.Timeout)

@@ -1,0 +1,22 @@
+id: tomcat-manager-default
+info:
+  name: Apache Tomcat Manager Default Credentials
+  severity: critical
+  cve: CVE-2017-12617
+  description: Apache Tomcat Manager is accessible with default credentials (admin/admin)
+  product: "Apache Tomcat"
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/manager/html"
+      - "/manager/status"
+    headers:
+      Authorization: "Basic YWRtaW46YWRtaW4="
+    matchers:
+      - type: string
+        words:
+          - "Tomcat Manager Application"
+          - "Application Manager"
+          - "Server Status"

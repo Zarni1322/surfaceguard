@@ -101,12 +101,34 @@ func (f *ServiceFingerprinter) Fingerprint(port models.Port) models.Port {
 	if isHTTPService(service) {
 		httpEv := f.doHTTPFingerprint(port)
 		evidences = append(evidences, httpEv...)
+	} else if service == "ssh" && port.TargetIP != "" {
+		sshEv := doSSHFingerprint(port.TargetIP, port.Port, f.timeout)
+		evidences = append(evidences, sshEv...)
+	} else if service == "mysql" && port.TargetIP != "" {
+		mysqlEv := doMySQLFingerprint(port.TargetIP, port.Port, f.timeout)
+		evidences = append(evidences, mysqlEv...)
+	} else if service == "postgresql" && port.TargetIP != "" {
+		pgEv := doPostgreSQLFingerprint(port.TargetIP, port.Port, f.timeout)
+		evidences = append(evidences, pgEv...)
+	} else if service == "smtp" && port.TargetIP != "" {
+		smtpEv := doSMTPFingerprint(port.TargetIP, port.Port, f.timeout)
+		evidences = append(evidences, smtpEv...)
+	} else if service == "ftp" && port.TargetIP != "" {
+		ftpEv := doFTPFingerprint(port.TargetIP, port.Port, f.timeout)
+		evidences = append(evidences, ftpEv...)
+	} else if service == "redis" && port.TargetIP != "" {
+		redisEv := doRedisFingerprint(port.TargetIP, port.Port, f.timeout)
+		evidences = append(evidences, redisEv...)
 	}
 
-	// TLS evidence from the banner (passive).
+	// TLS evidence from the banner (passive) + active TLS probe.
 	if len(port.Banner) > 0 {
 		tlsEv := collectTLSEvidence(port.Banner)
 		evidences = append(evidences, tlsEv...)
+	}
+	if port.TargetIP != "" && (port.Port == 443 || port.Port == 8443 || service == "https") {
+		tlsProbeEv := doTLSFingerprint(port.TargetIP, port.Port, f.timeout)
+		evidences = append(evidences, tlsProbeEv...)
 	}
 
 	// Step 3: Correlate all evidence into a final product/confidence.
@@ -123,15 +145,32 @@ func (f *ServiceFingerprinter) Fingerprint(port models.Port) models.Port {
 	}
 
 	// Step 5: Generate CPEs.
-	port.CPEs = buildCPEs(port.Product, port.Version, port.Service, port.Port)
+	port.CPEs = buildCPEs(port.Product, port.Version, port.Service, port.Port, port.Confidence)
 
 	return port
 }
 
 // cpesFromFingerprint generates CPE entries from fingerprint results.
 // buildCPEs generates CPE entries from fingerprint results.
-func buildCPEs(product, version, service string, portNum int) []models.CPE {
+// If fingerprint confidence is below 50 and no product was detected from
+// banner evidence, CPE generation is skipped. This prevents false positives
+// from port-based service guesses that assume a specific product without
+// any banner verification. (Phase A FP reduction)
+func buildCPEs(product, version, service string, portNum int, confidence int) []models.CPE {
 	if product == "" && service == "" {
+		return nil
+	}
+	// Phase A: Skip port-guess CPEs for services where the product was
+	// inferred from the port number without banner verification.
+	// HTTP (80/443/8080/8443) and SMB (139/445) ports are the highest-FP
+	// sources because their service-name defaults (apache:http_server,
+	// samba:samba) are frequently wrong on real targets.
+	// We only skip when:
+	//   1. No banner evidence (confidence < 70), AND
+	//   2. The service is HTTP/HTTPS or SMB (highest FP services)
+	// Other services like ssh→OpenSSH, mysql→MySQL have reliable
+	// service-to-product mappings and are kept even without banners.
+	if confidence < 70 && (service == "http" || service == "https" || service == "smb") {
 		return nil
 	}
 	if version == "" {
@@ -227,10 +266,12 @@ func (f *ServiceFingerprinter) doHTTPFingerprint(port models.Port) []Evidence {
 		scheme = "https"
 	}
 
-	// Use 127.0.0.1 as placeholder — the actual target IP would come from
-	// the scanner which calls Fingerprint with the resolved IP. Since we
-	// don't have the IP here, we use the port's context or a reasonable default.
-	targetIP := "127.0.0.1"
+	// Use the target IP from the port. The scanner sets this before
+	// calling Fingerprint(). Fallback to 127.0.0.1 if not set.
+	targetIP := port.TargetIP
+	if targetIP == "" {
+		targetIP = "127.0.0.1"
+	}
 
 	addr := fmt.Sprintf("%s://%s:%d/", scheme, targetIP, port.Port)
 	req, err := http.NewRequest("GET", addr, nil)
@@ -456,6 +497,290 @@ func collectTLSEvidence(banner string) []Evidence {
 // 4. Apply cross-source bonus (evidence from different source types).
 // 5. Select the product with the highest weighted score.
 // 6. If nothing found, fall back to service-level guess.
+
+// ============================================================================
+// Active Protocol Probes (Phase A)
+// ============================================================================
+
+// doSSHFingerprint connects to an SSH server and reads its banner to extract
+// the exact product and version. SSH servers always send a banner on connect.
+func doSSHFingerprint(ip string, port int, timeout time.Duration) []Evidence {
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	dialer := &net.Dialer{Timeout: timeout}
+	conn, err := dialer.Dial("tcp", addr)
+	if err != nil {
+		return nil
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(timeout / 2))
+	buf := make([]byte, 2048)
+	n, _ := conn.Read(buf)
+	if n == 0 {
+		return nil
+	}
+	banner := sanitizeBanner(string(buf[:n]))
+	var evidences []Evidence
+	if strings.Contains(banner, "OpenSSH") {
+		ver := extractVersion(banner)
+		evidences = append(evidences, Evidence{
+			Source: "ssh_banner", Product: "OpenSSH", Version: ver,
+			Confidence: 95, Raw: banner[:min(len(banner), 120)],
+		})
+	} else if strings.Contains(banner, "dropbear") || strings.Contains(banner, "Dropbear") {
+		ver := extractVersion(banner)
+		evidences = append(evidences, Evidence{
+			Source: "ssh_banner", Product: "Dropbear", Version: ver,
+			Confidence: 95, Raw: banner[:min(len(banner), 120)],
+		})
+	}
+	return evidences
+}
+
+// doMySQLFingerprint connects to a MySQL server and reads its greeting packet
+// which contains the exact version string.
+func doMySQLFingerprint(ip string, port int, timeout time.Duration) []Evidence {
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	dialer := &net.Dialer{Timeout: timeout}
+	conn, err := dialer.Dial("tcp", addr)
+	if err != nil {
+		return nil
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(timeout / 2))
+	buf := make([]byte, 2048)
+	n, _ := conn.Read(buf)
+	if n < 5 {
+		return nil
+	}
+	raw := string(buf[:n])
+	// MySQL greeting packet has version string after the first null byte.
+	// Format: len(3) + proto(1) + version(null-terminated) + ...
+	sanitized := sanitizeBanner(raw)
+	var evidences []Evidence
+	if strings.Contains(sanitized, "MySQL") || strings.Contains(sanitized, "mariadb") ||
+		strings.Contains(sanitized, "MariaDB") || strings.Contains(sanitized, "5.") ||
+		strings.Contains(sanitized, "8.") || strings.Contains(sanitized, "10.") {
+		ver := extractVersion(sanitized)
+		product := "MySQL"
+		if strings.Contains(sanitized, "MariaDB") || strings.Contains(sanitized, "mariadb") {
+			product = "MariaDB"
+		}
+		evidences = append(evidences, Evidence{
+			Source: "mysql_greeting", Product: product, Version: ver,
+			Confidence: 90, Raw: sanitized[:min(len(sanitized), 120)],
+		})
+	}
+	return evidences
+}
+
+// doPostgreSQLFingerprint connects to a PostgreSQL server and reads its
+// greeting packet with the version string.
+func doPostgreSQLFingerprint(ip string, port int, timeout time.Duration) []Evidence {
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	dialer := &net.Dialer{Timeout: timeout}
+	conn, err := dialer.Dial("tcp", addr)
+	if err != nil {
+		return nil
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(timeout / 2))
+	buf := make([]byte, 2048)
+	n, _ := conn.Read(buf)
+	if n == 0 {
+		return nil
+	}
+	banner := sanitizeBanner(string(buf[:n]))
+	var evidences []Evidence
+	if strings.Contains(banner, "PostgreSQL") || strings.Contains(banner, "postgres") {
+		ver := extractVersion(banner)
+		evidences = append(evidences, Evidence{
+			Source: "postgresql_greeting", Product: "PostgreSQL", Version: ver,
+			Confidence: 90, Raw: banner[:min(len(banner), 120)],
+		})
+	}
+	return evidences
+}
+
+// doSMTPFingerprint connects to an SMTP server and reads its greeting.
+func doSMTPFingerprint(ip string, port int, timeout time.Duration) []Evidence {
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	dialer := &net.Dialer{Timeout: timeout}
+	conn, err := dialer.Dial("tcp", addr)
+	if err != nil {
+		return nil
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(timeout / 2))
+	buf := make([]byte, 2048)
+	n, _ := conn.Read(buf)
+	if n == 0 {
+		return nil
+	}
+	banner := sanitizeBanner(string(buf[:n]))
+	var evidences []Evidence
+	if strings.Contains(banner, "Postfix") {
+		ver := extractVersion(banner)
+		evidences = append(evidences, Evidence{
+			Source: "smtp_banner", Product: "Postfix", Version: ver,
+			Confidence: 90, Raw: banner[:min(len(banner), 120)],
+		})
+	} else if strings.Contains(banner, "Exim") {
+		ver := extractVersion(banner)
+		evidences = append(evidences, Evidence{
+			Source: "smtp_banner", Product: "Exim", Version: ver,
+			Confidence: 90, Raw: banner[:min(len(banner), 120)],
+		})
+	} else if strings.Contains(banner, "Sendmail") {
+		ver := extractVersion(banner)
+		evidences = append(evidences, Evidence{
+			Source: "smtp_banner", Product: "Sendmail", Version: ver,
+			Confidence: 85, Raw: banner[:min(len(banner), 120)],
+		})
+	}
+	return evidences
+}
+
+// doFTPFingerprint connects to an FTP server and reads its greeting.
+func doFTPFingerprint(ip string, port int, timeout time.Duration) []Evidence {
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	dialer := &net.Dialer{Timeout: timeout}
+	conn, err := dialer.Dial("tcp", addr)
+	if err != nil {
+		return nil
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(timeout / 2))
+	buf := make([]byte, 2048)
+	n, _ := conn.Read(buf)
+	if n == 0 {
+		return nil
+	}
+	banner := sanitizeBanner(string(buf[:n]))
+	var evidences []Evidence
+	if strings.Contains(banner, "vsFTPd") {
+		ver := extractVersion(banner)
+		evidences = append(evidences, Evidence{
+			Source: "ftp_banner", Product: "vsftpd", Version: ver,
+			Confidence: 95, Raw: banner[:min(len(banner), 120)],
+		})
+	} else if strings.Contains(banner, "ProFTPD") {
+		ver := extractVersion(banner)
+		evidences = append(evidences, Evidence{
+			Source: "ftp_banner", Product: "ProFTPD", Version: ver,
+			Confidence: 95, Raw: banner[:min(len(banner), 120)],
+		})
+	} else if strings.Contains(banner, "Pure-FTPd") {
+		ver := extractVersion(banner)
+		evidences = append(evidences, Evidence{
+			Source: "ftp_banner", Product: "Pure-FTPd", Version: ver,
+			Confidence: 95, Raw: banner[:min(len(banner), 120)],
+		})
+	}
+	return evidences
+}
+
+// doRedisFingerprint connects to a Redis server and reads its banner/error.
+func doRedisFingerprint(ip string, port int, timeout time.Duration) []Evidence {
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	dialer := &net.Dialer{Timeout: timeout}
+	conn, err := dialer.Dial("tcp", addr)
+	if err != nil {
+		return nil
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(timeout / 2))
+	buf := make([]byte, 2048)
+	n, _ := conn.Read(buf)
+	if n == 0 {
+		return nil
+	}
+	banner := sanitizeBanner(string(buf[:n]))
+	var evidences []Evidence
+	if strings.Contains(banner, "redis") || strings.Contains(banner, "Redis") ||
+		strings.Contains(banner, "ERR") || strings.Contains(banner, "+OK") {
+		ver := extractVersion(banner)
+		evidences = append(evidences, Evidence{
+			Source: "redis_banner", Product: "Redis", Version: ver,
+			Confidence: 85, Raw: banner[:min(len(banner), 120)],
+		})
+	}
+	return evidences
+}
+
+// doTLSFingerprint connects to a TLS server and extracts certificate info.
+func doTLSFingerprint(ip string, port int, timeout time.Duration) []Evidence {
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	dialer := &net.Dialer{Timeout: timeout}
+	conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{
+		InsecureSkipVerify: true,
+	})
+	if err != nil {
+		return nil
+	}
+	defer conn.Close()
+
+	state := conn.ConnectionState()
+	var evidences []Evidence
+	
+	// Extract certificate information.
+	if len(state.PeerCertificates) > 0 {
+		cert := state.PeerCertificates[0]
+		cn := cert.Subject.CommonName
+		issuer := cert.Issuer.CommonName
+		if cn != "" || issuer != "" {
+			raw := "CN=" + cn + " issuer=" + issuer
+			evidences = append(evidences, Evidence{
+				Source: "tls_cert", Product: "", Version: "",
+				Confidence: 60, Raw: raw[:min(len(raw), 120)],
+			})
+		}
+		// Check for specific product indicators in certificate.
+		for _, s := range cert.Subject.Organization {
+			lower := strings.ToLower(s)
+			if strings.Contains(lower, "nginx") {
+				evidences = append(evidences, Evidence{
+					Source: "tls_cert_org", Product: "nginx",
+					Confidence: 70, Raw: s,
+				})
+			} else if strings.Contains(lower, "apache") || strings.Contains(lower, "httpd") {
+				evidences = append(evidences, Evidence{
+					Source: "tls_cert_org", Product: "Apache httpd",
+					Confidence: 70, Raw: s,
+				})
+			} else if strings.Contains(lower, "iis") || strings.Contains(lower, "microsoft") {
+				evidences = append(evidences, Evidence{
+					Source: "tls_cert_org", Product: "Microsoft IIS",
+					Confidence: 70, Raw: s,
+				})
+			} else if strings.Contains(lower, "cloudflare") {
+				evidences = append(evidences, Evidence{
+					Source: "tls_cert_org", Product: "Cloudflare",
+					Confidence: 90, Raw: s,
+				})
+			}
+		}
+	}
+	
+	// TLS version info.
+	var tlsVer string
+	switch state.Version {
+	case tls.VersionTLS13:
+		tlsVer = "TLS 1.3"
+	case tls.VersionTLS12:
+		tlsVer = "TLS 1.2"
+	case tls.VersionTLS11:
+		tlsVer = "TLS 1.1"
+	case tls.VersionTLS10:
+		tlsVer = "TLS 1.0"
+	}
+	if tlsVer != "" {
+		evidences = append(evidences, Evidence{
+			Source: "tls_version", Product: "", Version: tlsVer,
+			Confidence: 50,
+		})
+	}
+	return evidences
+}
 func correlateEvidence(evidences []Evidence, serviceConfidence int, service string) (product string, version string, confidence int) {
 	if len(evidences) == 0 {
 		// No evidence — fall back to port-based service guess.
@@ -967,7 +1292,7 @@ func detectProduct(banner, service string, port int) (product, version string) {
 // generateCPEs creates CPE entries for a detected service/product.
 // Kept for backward compatibility with tests.
 func generateCPEs(port models.Port) []models.CPE {
-	return buildCPEs(port.Product, port.Version, port.Service, port.Port)
+	return buildCPEs(port.Product, port.Version, port.Service, port.Port, port.Confidence)
 }
 
 func extractHTTPHeader(banner, headerName string) string {

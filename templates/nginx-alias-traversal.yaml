@@ -1,0 +1,20 @@
+id: nginx-alias-traversal
+info:
+  name: nginx Alias Traversal
+  severity: medium
+  cve: CVE-2013-0337
+  description: nginx may be vulnerable to directory traversal via misconfigured alias directives.
+  product: "nginx"
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/../"
+      - "/static../"
+    matchers:
+      - type: regex
+        pattern:
+          - "root:.*:0:0:"
+          - "index of /"
+          - "Directory listing for"

@@ -1,0 +1,21 @@
+id: phpinfo-disclosure
+info:
+  name: PHP phpinfo() Disclosure
+  severity: medium
+  cve: CVE-2001-1030
+  description: The server exposes phpinfo() output, revealing system configuration details.
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/phpinfo.php"
+      - "/info.php"
+      - "/test.php"
+    matchers:
+      - type: regex
+        pattern:
+          - "PHP Version"
+          - "PHP License"
+          - "phpinfo\\(\\)"
+          - "PHP Credits"

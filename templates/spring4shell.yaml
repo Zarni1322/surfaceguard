@@ -1,0 +1,16 @@
+id: spring4shell
+info:
+  name: Spring4Shell Remote Code Execution
+  severity: critical
+  cve: CVE-2022-22965
+  description: Spring Framework Remote Code Execution via class injection.
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/?class.module.classLoader.DefaultAssertionStatus=true"
+    matchers:
+      - type: status
+        status:
+          - 200

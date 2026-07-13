@@ -61,6 +61,7 @@ type Port struct {
 	CPEs       []CPE  `json:"cpes"`       // matched CPEs
 	State      string `json:"state"`      // "open", "filtered"
 	Confidence int    `json:"confidence"` // 0-100 fingerprinting confidence
+	TargetIP   string `json:"target_ip,omitempty"` // IP address for active probes
 }
 
 // CPE represents a Common Platform Enumeration entry (CPE 2.3 format).

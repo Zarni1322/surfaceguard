@@ -1,0 +1,14 @@
+id: openssh-libssh-auth-bypass
+info:
+  name: OpenSSH/libSSH Authentication Bypass
+  severity: critical
+  cve: CVE-2018-10933
+  description: libSSH authentication bypass vulnerability affects SSH servers using vulnerable versions.
+  product: "OpenSSH"
+  service: ssh
+
+requests:
+  - method: GET
+    path:
+      - "/"
+    matchers: []
