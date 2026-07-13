@@ -103,6 +103,7 @@ export default function ScanHistoryPage() {
                   <TableHead className="text-[#94A3B8]">Findings</TableHead>
                   <TableHead className="text-[#94A3B8]">Risk</TableHead>
                   <TableHead className="text-[#94A3B8]">Status</TableHead>
+                  <TableHead className="text-[#94A3B8] w-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -148,6 +149,17 @@ export default function ScanHistoryPage() {
                       >
                         {rec.status}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault();
+                          axios.delete(`/api/scan-history?id=${rec.id}`).then(() => refetch());
+                        }}
+                        className="text-[#64748B] hover:text-[#EF4444] transition-colors p-1"
+                        title="Delete scan record"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </TableCell>
                   </TableRow>
                   );

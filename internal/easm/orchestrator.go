@@ -16,6 +16,7 @@ import (
 	"github.com/evilhunter/surfaceguard/internal/easm/discovery"
 	"github.com/evilhunter/surfaceguard/internal/fingerprint"
 	"github.com/evilhunter/surfaceguard/internal/matcher"
+	"github.com/evilhunter/surfaceguard/internal/validation"
 	"github.com/evilhunter/surfaceguard/internal/wordlist"
 	"github.com/evilhunter/surfaceguard/pkg/cpe"
 	"github.com/evilhunter/surfaceguard/pkg/models"
@@ -419,16 +420,18 @@ func (o *Orchestrator) runWithID(ctx context.Context, req models.EASMScanRequest
 			continue
 		}
 
-		// Parse CPE from the URI
-		parts := strings.SplitN(svc.CPE23URI, ":", 7)
+		// Parse CPE from the URI — preserve the full CPE23URI so that
+		// MatchPort's FindByCPE23URI lookup matches the exact DB entry.
+		parts := strings.SplitN(svc.CPE23URI, ":", -1)
 		if len(parts) < 6 {
 			continue
 		}
-		cpe := models.CPE{
-			Part:    parts[2],
-			Vendor:  parts[3],
-			Product: parts[4],
-			Version: parts[5],
+		cp := models.CPE{
+			Part:     parts[2],
+			Vendor:   parts[3],
+			Product:  parts[4],
+			Version:  parts[5],
+			CPE23URI: svc.CPE23URI,
 		}
 
 		port := models.Port{
@@ -436,13 +439,16 @@ func (o *Orchestrator) runWithID(ctx context.Context, req models.EASMScanRequest
 			Service: svc.Service,
 			Product: svc.Product,
 			Version: svc.Version,
-			CPEs:    []models.CPE{cpe},
+			CPEs:    []models.CPE{cp},
 		}
 
 		// Use the matcher (same one used by the scanner).
 		findings := o.matcher.MatchPort(ctx, svc.Hostname, "", port)
 
-		for _, f := range findings {
+		// Phase 4: Validate findings — suppress weak matches.
+		validated, _ := validation.ValidateAll(findings, validation.DefaultOptions())
+
+		for _, f := range validated {
 			sev := f.CVE.Severity
 			if sev == "" {
 				sev = "NONE"
@@ -456,8 +462,12 @@ func (o *Orchestrator) runWithID(ctx context.Context, req models.EASMScanRequest
 				sevCounts["KEV"]++
 			}
 
+			// Resolve actual DB service ID from asset+port key.
+			assetID := svc.AssetID
+			svcKey := assetID*100000 + int64(svc.Port)
+			svcID := svcIDMap[svcKey]
 			cveFinding := models.EASMFinding{
-				ServiceID:      int64(svc.Port), // temporarily store port for ID lookup below
+				ServiceID:      svcID,
 				ScanID:         scanID,
 				CVEID:          f.CVE.ID,
 				CVSSv3:         f.CVE.CVSSv3,
@@ -470,26 +480,17 @@ func (o *Orchestrator) runWithID(ctx context.Context, req models.EASMScanRequest
 				MatchedCPE:     svc.CPE23URI,
 				MatchedVersion: svc.Version,
 			}
-			allFindings = append(allFindings, cveFinding)
+			if svcID > 0 {
+				allFindings = append(allFindings, cveFinding)
+			}
 		}
 	}
 
 	// Persist findings.
 	if len(allFindings) > 0 {
 		for _, fi := range allFindings {
-			// Find actual service ID by matching port against DB services
-			svcID := int64(0)
-			for _, ds := range dbServices {
-				if int64(ds.Port) == fi.ServiceID {
-					svcID = ds.ID
-					break
-				}
-			}
-			if svcID == 0 {
-				continue
-			}
 			findingDB = append(findingDB, database.DBEASMFinding{
-				ServiceID:      svcID,
+				ServiceID:      fi.ServiceID,
 				ScanID:         scanID,
 				CVEID:          fi.CVEID,
 				CVSSv3:         fi.CVSSv3,

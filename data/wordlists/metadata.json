@@ -1,0 +1,40 @@
+{
+  "current_version": "2026.07.10",
+  "latest_version": "",
+  "last_updated": "2026-07-10T09:21:10Z",
+  "wordlists": {
+    "large": {
+      "size": "large",
+      "source": "seclists",
+      "download_url": "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-110000.txt",
+      "version": "2026.07.10",
+      "downloaded_at": "2026-07-10T09:21:10Z",
+      "last_checked": "2026-07-10T09:21:10Z",
+      "checksum_sha256": "7b8359732bdee838ecdb9ef2cd3bb9a792347dab0457fd9b33a9b152d8dc238d",
+      "file_size": 1311067,
+      "status": "installed"
+    },
+    "medium": {
+      "size": "medium",
+      "source": "seclists",
+      "download_url": "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-20000.txt",
+      "version": "2026.07.10",
+      "downloaded_at": "2026-07-10T09:21:09Z",
+      "last_checked": "2026-07-10T09:21:09Z",
+      "checksum_sha256": "685fad386d19c3b7ecbcd18645606bc5c47a3b2339fa3d79f44c46bd9e79c1ef",
+      "file_size": 135562,
+      "status": "installed"
+    },
+    "small": {
+      "size": "small",
+      "source": "seclists",
+      "download_url": "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-5000.txt",
+      "version": "2026.07.10",
+      "downloaded_at": "2026-07-10T09:21:09Z",
+      "last_checked": "2026-07-10T09:21:09Z",
+      "checksum_sha256": "e331367c140298cb179114fdeefa78f58f696219f0dec017a28bb79487cfcf19",
+      "file_size": 30075,
+      "status": "installed"
+    }
+  }
+}

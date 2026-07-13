@@ -1464,6 +1464,18 @@ func (r *sqliteScanHistoryRepo) GetByID(ctx context.Context, id int64) (*DBScanH
 	return &s, nil
 }
 
+func (r *sqliteScanHistoryRepo) Delete(ctx context.Context, id int64) error {
+	result, err := r.db.ExecContext(ctx, "DELETE FROM scan_history WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("delete scan history: %w", err)
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return fmt.Errorf("scan record %d not found", id)
+	}
+	return nil
+}
+
 func (r *sqliteScanHistoryRepo) DeleteAll(ctx context.Context) error {
 	_, err := r.db.ExecContext(ctx, "DELETE FROM scan_history")
 	return err

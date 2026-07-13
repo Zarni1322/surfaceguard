@@ -204,6 +204,8 @@ type ScanHistoryRepository interface {
 	List(ctx context.Context, limit int) ([]DBScanHistory, error)
 	// GetByID returns a single scan record by its ID.
 	GetByID(ctx context.Context, id int64) (*DBScanHistory, error)
+		// Delete removes a single scan record by ID.
+		Delete(ctx context.Context, id int64) error
 	// DeleteAll removes all scan history records.
 	DeleteAll(ctx context.Context) error
 	// Count returns the total number of scan records.
