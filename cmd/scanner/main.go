@@ -219,6 +219,7 @@ type scanFlags struct {
 	cvssThreshold float64
 	fingerprint   bool
 	file          string
+		useDB         bool
 }
 
 func newScanCmd(cfg *config.Config, logger *slog.Logger) *cobra.Command {
@@ -251,6 +252,7 @@ Examples:
 	cmd.Flags().Float64Var(&f.cvssThreshold, "cvss-threshold", cfg.Report.CVSSThreshold, "Minimum CVSSv3 score to report")
 	cmd.Flags().BoolVar(&f.fingerprint, "fingerprint", cfg.Scan.Fingerprint, "Enable HTTP fingerprinting")
 	cmd.Flags().StringVarP(&f.file, "file", "T", "", "File containing targets (one per line)")
+	cmd.Flags().BoolVar(&f.useDB, "db", false, "Enable CPE database matching (requires NVD database)")
 
 	return cmd
 }
@@ -284,29 +286,27 @@ func runScan(cmd *cobra.Command, cfg *config.Config, logger *slog.Logger, f *sca
 	opts.OutputFormat = f.format
 	opts.OutputFile = f.output
 
-	// Open database.
-	dbPath, err := cfg.ResolveDatabasePath()
-	if err != nil {
-		logger.Debug("database path resolved", "path", dbPath)
-		return fmt.Errorf("resolving database path: %w", err)
-	}
-
-	// Ensure data directory exists.
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
-		return fmt.Errorf("creating data directory: %w", err)
-	}
-
-	db, err := database.NewSQLiteDatabase(ctx, dbPath)
-	if err != nil {
-		return fmt.Errorf("opening database: %w", err)
-	}
-	defer db.Close()
-
-	// Create matcher and scanner.
-	m := matcher.NewWithOptions(db, matcher.Options{
-		MinConfidenceForFallback: cfg.Scan.MinConfidenceForFallback,
-	})
-	s := scanner.NewWithTemplates(cfg, m, "templates", logger)
+		// Phase E: Database + CPE matcher are optional. Without --db, only template engine runs.
+		var m *matcher.Matcher
+		if f.useDB {
+			dbPath, err := cfg.ResolveDatabasePath()
+			if err != nil {
+				return fmt.Errorf("resolving database path: %w", err)
+			}
+			if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
+				return fmt.Errorf("creating data directory: %w", err)
+			}
+			db, err := database.NewSQLiteDatabase(ctx, dbPath)
+			if err != nil {
+				return fmt.Errorf("opening database: %w", err)
+			}
+			defer db.Close()
+			m = matcher.NewWithOptions(db, matcher.Options{
+				MinConfidenceForFallback: cfg.Scan.MinConfidenceForFallback,
+			})
+			logger.Info("CPE database enabled")
+		}
+		s := scanner.NewWithMatcher(cfg, m, "templates", logger)
 
 	// Run the scan.
 	logger.Info("starting scan", "target", targetArg, "ports", len(opts.Ports))

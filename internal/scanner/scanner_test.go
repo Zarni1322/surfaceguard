@@ -30,7 +30,7 @@ func setupTestScanner(t *testing.T) (*Scanner, database.Database) {
 	m := matcher.New(db)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
-	return New(cfg, m, logger), db
+	return NewWithMatcher(cfg, m, "", logger), db
 }
 
 func TestNewScanner(t *testing.T) {
@@ -129,7 +129,7 @@ func TestScanWithDBData(t *testing.T) {
 
 	m := matcher.New(db)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	s := New(cfg, m, logger)
+	s := NewWithMatcher(cfg, m, "", logger)
 
 	target := &models.Target{
 		Raw:   "127.0.0.1",

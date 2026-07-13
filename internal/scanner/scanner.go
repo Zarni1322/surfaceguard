@@ -29,6 +29,10 @@ import (
 )
 
 // Scanner is the top-level orchestrator for vulnerability scans.
+// Phase E: The scanner uses two detection modes in parallel:
+//   1. Template engine (primary) — Nuclei-style YAML templates with verified responses
+//   2. CPE matcher (fallback)   — database-driven CVE lookup (optional, requires --db flag)
+// If no matcher is provided (nil), only template-based detection runs.
 type Scanner struct {
 	cfg          *config.Config
 	fingerprinter *fingerprint.ServiceFingerprinter
@@ -37,19 +41,25 @@ type Scanner struct {
 	logger       *slog.Logger
 }
 
-// New creates a new Scanner orchestrator.
-func New(cfg *config.Config, m *matcher.Matcher, logger *slog.Logger) *Scanner {
-	return NewWithTemplates(cfg, m, "", logger)
+// New creates a Scanner with only template-based detection (no CPE matcher).
+func New(cfg *config.Config, templateDir string, logger *slog.Logger) *Scanner {
+	return NewWithMatcher(cfg, nil, templateDir, logger)
 }
 
-// NewWithTemplates creates a Scanner with a Nuclei-style template engine.
-func NewWithTemplates(cfg *config.Config, m *matcher.Matcher, templateDir string, logger *slog.Logger) *Scanner {
+// NewWithMatcher creates a Scanner with optional CPE matcher fallback.
+// Pass nil for matcher to run template-only mode.
+func NewWithMatcher(cfg *config.Config, m *matcher.Matcher, templateDir string, logger *slog.Logger) *Scanner {
 	eng, err := template.NewEngine(templateDir, cfg.Scan.Timeout)
 	if err != nil {
 		logger.Warn("template engine not available", "error", err)
 	}
 	if eng != nil && eng.Count() > 0 {
 		logger.Info("template engine loaded", "templates", eng.Count())
+	}
+	if m != nil {
+		logger.Info("CPE matcher enabled (fallback mode)")
+	} else {
+		logger.Info("CPE matcher disabled — template-only mode")
 	}
 	return &Scanner{
 		cfg:           cfg,
@@ -133,16 +143,18 @@ func (s *Scanner) Scan(ctx context.Context, target *models.Target, opts models.S
 		}
 	}
 
-		// Step 4: CPE → CVE matching for each open port with CPEs.
-		// Phase D: CPE-matched findings are marked as "LIKELY".
-		for _, p := range openPorts {
-			findings := s.matcher.MatchPort(ctx, target.Raw, scanIP, p)
-			for i := range findings {
-				if findings[i].TemplateID == "" {
-					findings[i].MatchType = "cpe_likely"
+		// Step 4: CPE → CVE matching (optional — only if matcher is configured).
+		// Phase E: When matcher is nil, only template-based detection runs.
+		if s.matcher != nil {
+			for _, p := range openPorts {
+				findings := s.matcher.MatchPort(ctx, target.Raw, scanIP, p)
+				for i := range findings {
+					if findings[i].TemplateID == "" {
+						findings[i].MatchType = "cpe_likely"
+					}
 				}
+				result.Findings = append(result.Findings, findings...)
 			}
-			result.Findings = append(result.Findings, findings...)
 		}
 
 		// Step 4b: Nuclei-style template-based verification.
