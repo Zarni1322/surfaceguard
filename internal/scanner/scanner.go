@@ -11,6 +11,7 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"strings"
 	"log/slog"
 	"os"
 	"sort"
@@ -21,6 +22,7 @@ import (
 	"github.com/evilhunter/surfaceguard/internal/matcher"
 	"github.com/evilhunter/surfaceguard/internal/report"
 	"github.com/evilhunter/surfaceguard/internal/scoring"
+	"github.com/evilhunter/surfaceguard/internal/template"
 	"github.com/evilhunter/surfaceguard/internal/validation"
 	"github.com/evilhunter/surfaceguard/pkg/models"
 	"github.com/evilhunter/surfaceguard/pkg/portscan"
@@ -31,15 +33,29 @@ type Scanner struct {
 	cfg          *config.Config
 	fingerprinter *fingerprint.ServiceFingerprinter
 	matcher      *matcher.Matcher
+	templateEng  *template.Engine
 	logger       *slog.Logger
 }
 
 // New creates a new Scanner orchestrator.
 func New(cfg *config.Config, m *matcher.Matcher, logger *slog.Logger) *Scanner {
+	return NewWithTemplates(cfg, m, "", logger)
+}
+
+// NewWithTemplates creates a Scanner with a Nuclei-style template engine.
+func NewWithTemplates(cfg *config.Config, m *matcher.Matcher, templateDir string, logger *slog.Logger) *Scanner {
+	eng, err := template.NewEngine(templateDir, cfg.Scan.Timeout)
+	if err != nil {
+		logger.Warn("template engine not available", "error", err)
+	}
+	if eng != nil && eng.Count() > 0 {
+		logger.Info("template engine loaded", "templates", eng.Count())
+	}
 	return &Scanner{
 		cfg:           cfg,
 		fingerprinter: fingerprint.NewServiceFingerprinter(cfg.Scan.Timeout),
 		matcher:       m,
+		templateEng:   eng,
 		logger:        logger,
 	}
 }
@@ -121,6 +137,34 @@ func (s *Scanner) Scan(ctx context.Context, target *models.Target, opts models.S
 	for _, p := range openPorts {
 		findings := s.matcher.MatchPort(ctx, target.Raw, scanIP, p)
 		result.Findings = append(result.Findings, findings...)
+		result.Findings = append(result.Findings, findings...)
+	}
+
+	// Step 4b: Nuclei-style template-based verification.
+	if s.templateEng != nil && s.templateEng.Count() > 0 {
+		for _, p := range openPorts {
+			tmplFindings := s.templateEng.Run(scanIP, p.Port, p.Service, p.Product)
+			for _, tf := range tmplFindings {
+				cvss := cvssFromSeverity(tf.Severity)
+				severity := strings.ToUpper(tf.Severity)
+				result.Findings = append(result.Findings, models.Finding{
+					Host:            target.Raw,
+					IP:              scanIP,
+					Port:            p,
+					MatchConfidence: 100,
+					MatchType:       "template_verified",
+					MatchEvidence:   fmt.Sprintf("Template matched at %s", tf.MatchedAt),
+					TemplateID:      tf.TemplateID,
+					DetectedVersion: p.Version,
+					CVE: models.CVE{
+						ID:          tf.CVE,
+						Description: tf.Description,
+						CVSSv3:      &cvss,
+						Severity:    severity,
+					},
+				})
+			}
+		}
 	}
 
 	// Deduplicate and sort findings.
@@ -201,4 +245,21 @@ func (s *Scanner) GenerateReport(result *models.ScanResult, format string, outpu
 // GetSummary returns a one-line summary of the scan result.
 func (s *Scanner) GetSummary(result *models.ScanResult) string {
 	return result.Summary()
+}
+
+// cvssFromSeverity returns a CVSSv3 score for a given severity label.
+// This is used for template findings where CVSS is not always specified.
+func cvssFromSeverity(severity string) float64 {
+	switch strings.ToLower(severity) {
+	case "critical":
+		return 9.8
+	case "high":
+		return 7.5
+	case "medium":
+		return 5.0
+	case "low":
+		return 2.5
+	default:
+		return 0.0
+	}
 }

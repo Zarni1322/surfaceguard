@@ -306,7 +306,7 @@ func runScan(cmd *cobra.Command, cfg *config.Config, logger *slog.Logger, f *sca
 	m := matcher.NewWithOptions(db, matcher.Options{
 		MinConfidenceForFallback: cfg.Scan.MinConfidenceForFallback,
 	})
-	s := scanner.New(cfg, m, logger)
+	s := scanner.NewWithTemplates(cfg, m, "templates", logger)
 
 	// Run the scan.
 	logger.Info("starting scan", "target", targetArg, "ports", len(opts.Ports))

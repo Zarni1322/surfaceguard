@@ -176,6 +176,11 @@ type Finding struct {
 	// One of: "exact_version", "version_range_match", "nearby_version",
 	// "db_version_match", "version_mismatch", "unknown_version".
 	VersionMatchResult string `json:"version_match_result,omitempty"`
+
+	// TemplateID identifies the Nuclei-style template that produced this finding.
+	// Empty means this came from the CPE-based matcher.
+	// Non-empty means this finding was verified by an active template check.
+	TemplateID string `json:"template_id,omitempty"`
 }
 
 // ScanResult holds the complete output of a scan session.
