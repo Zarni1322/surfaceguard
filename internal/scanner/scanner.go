@@ -133,39 +133,45 @@ func (s *Scanner) Scan(ctx context.Context, target *models.Target, opts models.S
 		}
 	}
 
-	// Step 4: CPE → CVE matching for each open port with CPEs.
-	for _, p := range openPorts {
-		findings := s.matcher.MatchPort(ctx, target.Raw, scanIP, p)
-		result.Findings = append(result.Findings, findings...)
-		result.Findings = append(result.Findings, findings...)
-	}
-
-	// Step 4b: Nuclei-style template-based verification.
-	if s.templateEng != nil && s.templateEng.Count() > 0 {
+		// Step 4: CPE → CVE matching for each open port with CPEs.
+		// Phase D: CPE-matched findings are marked as "LIKELY".
 		for _, p := range openPorts {
-			tmplFindings := s.templateEng.Run(scanIP, p.Port, p.Service, p.Product)
-			for _, tf := range tmplFindings {
-				cvss := cvssFromSeverity(tf.Severity)
-				severity := strings.ToUpper(tf.Severity)
-				result.Findings = append(result.Findings, models.Finding{
-					Host:            target.Raw,
-					IP:              scanIP,
-					Port:            p,
-					MatchConfidence: 100,
-					MatchType:       "template_verified",
-					MatchEvidence:   fmt.Sprintf("Template matched at %s", tf.MatchedAt),
-					TemplateID:      tf.TemplateID,
-					DetectedVersion: p.Version,
-					CVE: models.CVE{
-						ID:          tf.CVE,
-						Description: tf.Description,
-						CVSSv3:      &cvss,
-						Severity:    severity,
-					},
-				})
+			findings := s.matcher.MatchPort(ctx, target.Raw, scanIP, p)
+			for i := range findings {
+				if findings[i].TemplateID == "" {
+					findings[i].MatchType = "cpe_likely"
+				}
+			}
+			result.Findings = append(result.Findings, findings...)
+		}
+
+		// Step 4b: Nuclei-style template-based verification.
+		// Phase D: Template-verified findings are marked as "CONFIRMED".
+		if s.templateEng != nil && s.templateEng.Count() > 0 {
+			for _, p := range openPorts {
+				tmplFindings := s.templateEng.Run(scanIP, p.Port, p.Service, p.Product)
+				for _, tf := range tmplFindings {
+					cvss := cvssFromSeverity(tf.Severity)
+					severity := strings.ToUpper(tf.Severity)
+					result.Findings = append(result.Findings, models.Finding{
+						Host:            target.Raw,
+						IP:              scanIP,
+						Port:            p,
+						MatchConfidence: 100,
+						MatchType:       "template_confirmed",
+						MatchEvidence:   fmt.Sprintf("Template matched at %s", tf.MatchedAt),
+						TemplateID:      tf.TemplateID,
+						DetectedVersion: p.Version,
+						CVE: models.CVE{
+							ID:          tf.CVE,
+							Description: tf.Description,
+							CVSSv3:      &cvss,
+							Severity:    severity,
+						},
+					})
+				}
 			}
 		}
-	}
 
 	// Deduplicate and sort findings.
 	result.Findings = matcher.DeduplicateFindings(result.Findings)
