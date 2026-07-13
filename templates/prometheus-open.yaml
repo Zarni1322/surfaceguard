@@ -1,0 +1,23 @@
+id: prometheus-open
+info:
+  name: Prometheus Exposed Without Authentication
+  severity: medium
+  cve: CVE-2022-46150
+  description: Prometheus server exposed without authentication allows data exfiltration.
+  product: "Prometheus"
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/"
+      - "/metrics"
+      - "/api/v1/query?query=up"
+    matchers:
+      - type: string
+        words:
+          - "prometheus"
+          - "Prometheus"
+      - type: status
+        status:
+          - 200

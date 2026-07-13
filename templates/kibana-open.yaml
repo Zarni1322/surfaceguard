@@ -1,0 +1,24 @@
+id: kibana-open
+info:
+  name: Kibana Unauthenticated Access
+  severity: high
+  cve: CVE-2019-7609
+  description: Kibana exposed without authentication allows remote code execution.
+  product: "Kibana"
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/"
+      - "/app/kibana"
+      - "/api/status"
+    matchers:
+      - type: string
+        words:
+          - "kibana"
+          - "Kibana"
+          - "kbnVersion"
+      - type: status
+        status:
+          - 200

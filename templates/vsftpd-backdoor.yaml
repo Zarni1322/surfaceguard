@@ -1,0 +1,9 @@
+id: vsftpd-backdoor
+info:
+  name: vsftpd 2.3.4 Backdoor
+  severity: critical
+  cve: CVE-2011-2523
+  description: vsftpd 2.3.4 is backdoored via a smiley face trigger. Remote attacker can execute arbitrary commands on port 6200.
+  product: "vsftpd"
+  service: ftp
+  reference: https://nvd.nist.gov/vuln/detail/CVE-2011-2523

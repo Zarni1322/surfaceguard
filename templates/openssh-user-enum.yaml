@@ -1,0 +1,15 @@
+id: openssh-user-enum
+info:
+  name: OpenSSH Username Enumeration
+  severity: medium
+  cve: CVE-2018-15473
+  description: OpenSSH before 7.7 is vulnerable to username enumeration via timing differences in authentication responses.
+  product: "OpenSSH"
+  service: ssh
+  reference: https://nvd.nist.gov/vuln/detail/CVE-2018-15473
+
+requests:
+  - method: GET
+    path:
+      - "/"
+    matchers: []

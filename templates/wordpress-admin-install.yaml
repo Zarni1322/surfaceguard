@@ -1,0 +1,22 @@
+id: wordpress-admin-install
+info:
+  name: WordPress Admin Installation Accessible
+  severity: medium
+  cve: CVE-2017-5487
+  description: WordPress installation page wp-admin/install.php is accessible without authentication.
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/wp-admin/install.php"
+      - "/wordpress/wp-admin/install.php"
+    matchers:
+      - type: string
+        words:
+          - "WordPress"
+          - "wp-admin/install"
+          - "Installation"
+      - type: status
+        status:
+          - 200

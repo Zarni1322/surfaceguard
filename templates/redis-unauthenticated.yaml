@@ -1,0 +1,15 @@
+id: redis-unauthenticated
+info:
+  name: Redis Unauthenticated Access
+  severity: high
+  cve: CVE-2017-1000441
+  description: Redis with no authentication allows remote attacker to access or modify data.
+  product: "Redis"
+  service: redis
+  reference: https://nvd.nist.gov/vuln/detail/CVE-2017-1000441
+
+requests:
+  - method: GET
+    path:
+      - "/"
+    matchers: []

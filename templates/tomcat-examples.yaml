@@ -1,0 +1,24 @@
+id: tomcat-examples
+info:
+  name: Apache Tomcat Examples Available
+  severity: medium
+  cve: CVE-2022-23181
+  description: Apache Tomcat example applications are accessible, revealing server information.
+  product: "Apache Tomcat"
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/examples/"
+      - "/examples/servlets/"
+      - "/examples/jsp/"
+    matchers:
+      - type: string
+        words:
+          - "Tomcat"
+          - "Servlets examples"
+          - "JSP Examples"
+      - type: status
+        status:
+          - 200

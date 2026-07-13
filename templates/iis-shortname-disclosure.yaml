@@ -1,0 +1,24 @@
+id: iis-shortname-disclosure
+info:
+  name: Microsoft IIS Short File Name Disclosure
+  severity: medium
+  cve: CVE-2020-1464
+  description: Microsoft IIS may disclose 8.3 short file names via a tilde (~) character in the URL.
+  product: "Microsoft IIS"
+  service: http
+  reference: https://nvd.nist.gov/vuln/detail/CVE-2020-1464
+
+requests:
+  - method: GET
+    path:
+      - "/~1/"
+      - "/~1"
+      - "/*~1*"
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        pattern:
+          - "Directory listing"
+          - "Index of"

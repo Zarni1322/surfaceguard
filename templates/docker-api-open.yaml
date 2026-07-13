@@ -1,0 +1,22 @@
+id: docker-api-open
+info:
+  name: Docker Remote API Unauthenticated Access
+  severity: critical
+  cve: CVE-2020-14295
+  description: Docker Remote API exposed without authentication allows container escape and host takeover.
+  product: "Docker"
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/containers/json"
+      - "/version"
+      - "/info"
+    matchers:
+      - type: regex
+        pattern:
+          - "Docker"
+          - "ApiVersion"
+          - "Containers"
+          - "docker"

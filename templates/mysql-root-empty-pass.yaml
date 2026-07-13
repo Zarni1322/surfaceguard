@@ -1,0 +1,15 @@
+id: mysql-root-empty-pass
+info:
+  name: MySQL Root Empty Password
+  severity: critical
+  cve: CVE-2012-2122
+  description: MySQL with root empty password allows remote attacker to bypass authentication.
+  product: "MySQL"
+  service: mysql
+  reference: https://nvd.nist.gov/vuln/detail/CVE-2012-2122
+
+requests:
+  - method: GET
+    path:
+      - "/"
+    matchers: []

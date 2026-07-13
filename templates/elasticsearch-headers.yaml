@@ -1,0 +1,22 @@
+id: elasticsearch-headers
+info:
+  name: Elasticsearch Information Disclosure
+  severity: medium
+  cve: CVE-2014-3120
+  description: Elasticsearch exposes cluster information and can execute arbitrary code via dynamic scripting.
+  product: "Elasticsearch"
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/"
+      - "/_cat"
+      - "/_cluster/health"
+    matchers:
+      - type: regex
+        pattern:
+          - "cluster_name"
+          - "You Know, for Search"
+          - "tagline"
+          - "number_of_nodes"

@@ -1,0 +1,23 @@
+id: consul-open
+info:
+  name: Consul Unauthenticated Access
+  severity: high
+  cve: CVE-2020-25864
+  description: Hashicorp Consul exposed without authentication allows service registration and potential RCE.
+  product: "Consul"
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/"
+      - "/v1/agent/services"
+      - "/v1/status/leader"
+    matchers:
+      - type: string
+        words:
+          - "Consul"
+          - "consul"
+      - type: status
+        status:
+          - 200

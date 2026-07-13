@@ -1,0 +1,24 @@
+id: couchdb-open
+info:
+  name: CouchDB Unauthenticated Access
+  severity: high
+  cve: CVE-2017-12635
+  description: CouchDB exposed without authentication allows admin access.
+  product: "CouchDB"
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/"
+      - "/_all_dbs"
+      - "/_utils"
+    matchers:
+      - type: string
+        words:
+          - "couchdb"
+          - "CouchDB"
+          - "Welcome"
+      - type: status
+        status:
+          - 200

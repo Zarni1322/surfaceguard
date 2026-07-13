@@ -175,18 +175,29 @@ func LoadFile(path string) (*Template, error) {
 }
 
 // TemplatesForService returns templates that match the given service and product.
+// A template matches if:
+//   - It has no service AND no product requirement (always runs), OR
+//   - Its service matches the given service, OR
+//   - Its product matches the given product
+// Both service AND product must be specified for a template that requires both.
 func (e *Engine) TemplatesForService(service, product string) []*Template {
 	var matched []*Template
 	for _, t := range e.templates {
-		// If template targets a specific service, only match that service.
-		if t.Info.Service != "" && t.Info.Service != service {
+		// No restrictions: always runs.
+		if t.Info.Service == "" && t.Info.Product == "" {
+			matched = append(matched, t)
 			continue
 		}
-		// If template targets a specific product, only match that product.
-		if t.Info.Product != "" && t.Info.Product != product {
+		// Service matches.
+		if t.Info.Service != "" && t.Info.Service == service {
+			matched = append(matched, t)
 			continue
 		}
-		matched = append(matched, t)
+		// Product matches.
+		if t.Info.Product != "" && t.Info.Product == product {
+			matched = append(matched, t)
+			continue
+		}
 	}
 	return matched
 }

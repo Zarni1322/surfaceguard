@@ -1,0 +1,23 @@
+id: jenkins-open
+info:
+  name: Jenkins Unauthenticated Access
+  severity: high
+  cve: CVE-2018-1000861
+  description: Jenkins exposed without authentication allows remote code execution via script console.
+  product: "Jenkins"
+  service: http
+
+requests:
+  - method: GET
+    path:
+      - "/"
+      - "/script"
+      - "/scriptText"
+    matchers:
+      - type: string
+        words:
+          - "Jenkins"
+          - "Jenkins ver."
+      - type: status
+        status:
+          - 200

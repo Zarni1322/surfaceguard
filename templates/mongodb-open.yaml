@@ -1,0 +1,15 @@
+id: mongodb-open
+info:
+  name: MongoDB Open Access
+  severity: high
+  cve: CVE-2019-2391
+  description: MongoDB exposed without authentication allows data access.
+  product: "MongoDB"
+  service: mongodb
+  reference: https://nvd.nist.gov/vuln/detail/CVE-2019-2391
+
+requests:
+  - method: GET
+    path:
+      - "/"
+    matchers: []
